@@ -115,7 +115,7 @@ When the account’s official catalog advertises `gpt-reserve`, it appears at th
 
 ### GPT-6 Sol / Luna
 
-GPT-6 Sol and GPT-6 Luna are listed in [OpenAI's Codex model guidance](https://learn.chatgpt.com/docs/models). The plugin reads available models and reasoning levels from the current account's Codex catalog, so no model ID needs to be added manually; models do not appear before the account gets access. Sol suits complex coding, while Luna suits focused, high-volume tasks. Their extended context limits and Fast availability follow the account catalog.
+GPT-6 Sol and GPT-6 Luna are listed in [OpenAI's Codex model guidance](https://learn.chatgpt.com/docs/models). The plugin reads available models and reasoning levels from the current account's Codex catalog. It also bundles Sol and Luna as offline fallbacks for hosts whose installed pi-ai catalog predates GPT-6; a successfully refreshed account catalog remains authoritative. Sol suits complex coding, while Luna suits focused, high-volume tasks. The fallback uses a 272000-token standard window, an 872000-token extended limit, and Fast support. Selecting a fallback does not grant server-side model access.
 
 ### GPT-6 Astra context
 

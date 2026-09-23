@@ -4,6 +4,38 @@ export const CODEX_MODELS_URL = `https://chatgpt.com/backend-api/codex/models?cl
 
 const LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
 const DEFAULT_REFRESH_TIMEOUT_MS = 10_000
+const BUNDLED_FALLBACK_MODELS = Object.freeze([
+  Object.freeze({
+    id: 'gpt-6-luna',
+    name: 'GPT-6 Luna',
+    description: 'Efficient model for focused, high-volume tasks.',
+    priority: 3,
+    input: ['text', 'image'],
+    contextWindow: 272_000,
+    maxContextWindow: 872_000,
+    reasoning: true,
+    thinkingLevelMap: { off: null, minimal: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
+    supportVerbosity: true,
+    defaultVerbosity: 'low',
+    supportsFast: true,
+    templateId: 'gpt-5.6-luna',
+  }),
+  Object.freeze({
+    id: 'gpt-6-sol',
+    name: 'GPT-6 Sol',
+    description: 'Workhorse model for complex coding and agentic workflows.',
+    priority: 2,
+    input: ['text', 'image'],
+    contextWindow: 272_000,
+    maxContextWindow: 872_000,
+    reasoning: true,
+    thinkingLevelMap: { off: null, minimal: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
+    supportVerbosity: true,
+    defaultVerbosity: 'low',
+    supportsFast: true,
+    templateId: 'gpt-5.6-sol',
+  }),
+])
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 const nonEmpty = value => typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
 const positiveInteger = value => Number.isSafeInteger(value) && value > 0 ? value : undefined
@@ -82,6 +114,7 @@ export function parseOfficialModelCatalog(value) {
 
 function mergeModel(baseModels, remote) {
   const base = baseModels.find(model => model.id === remote.id)
+    ?? baseModels.find(model => model.id === remote.templateId)
     ?? baseModels.find(model => model.id !== 'gpt-5.3-codex-spark')
     ?? baseModels[0]
   if (base === undefined) return undefined
@@ -97,6 +130,16 @@ function mergeModel(baseModels, remote) {
     // Subscription-backed models do not expose API billing to this plugin.
     ...(base.id === remote.id ? {} : { cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }),
   }
+}
+
+export function addBundledCodexFallbacks(baseModels) {
+  const visible = baseModels.filter(model => model.id !== 'gpt-5.3-codex-spark')
+  const existing = new Set(visible.map(model => model.id))
+  const bundled = BUNDLED_FALLBACK_MODELS
+    .filter(model => !existing.has(model.id))
+    .map(model => mergeModel(baseModels, model))
+    .filter(Boolean)
+  return [...bundled, ...visible]
 }
 
 export function createOfficialModelCatalog(options = {}) {
@@ -193,9 +236,9 @@ export function createOfficialModelCatalog(options = {}) {
 
   return Object.freeze({
     refresh,
-    // Spark's research preview retired on 2026-09-14. A bundled offline list
-    // must not resurrect it; a successful official catalog remains authoritative.
-    getModels: fallback => models ?? fallback.filter(model => model.id !== 'gpt-5.3-codex-spark'),
+    // Keep current recommended models usable when the account catalog cannot be
+    // refreshed. A successful official catalog remains authoritative.
+    getModels: fallback => models ?? addBundledCodexFallbacks(fallback),
     metadata: modelId => metadata.get(modelId),
     revision: () => revision,
     capabilityGaps: () => [...metadata.values()]

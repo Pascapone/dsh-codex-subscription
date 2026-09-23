@@ -116,7 +116,7 @@ dsh --profile headless "只回复：ok"
 
 ### GPT-6 Sol / Luna
 
-GPT-6 Sol 和 GPT-6 Luna 已在 [OpenAI 的 Codex 模型说明](https://learn.chatgpt.com/docs/models)中列出。插件会从当前账号的 Codex 模型目录自动读取可用模型及推理档位，无需手动添加型号；账号尚未开放时不会显示。Sol 适合复杂编程，Luna 适合高频、目标明确的任务。两者的扩展上下文上限和高速模式以账号目录返回值为准。
+GPT-6 Sol 和 GPT-6 Luna 已在 [OpenAI 的 Codex 模型说明](https://learn.chatgpt.com/docs/models)中列出。插件会从当前账号的 Codex 模型目录自动读取可用模型及推理档位；对于 pi-ai 内置目录尚未包含 GPT-6 的宿主，还会提供 Sol 和 Luna 的离线回退项。账号目录刷新成功后仍以服务端目录为准。Sol 适合复杂编程，Luna 适合高频、目标明确的任务。离线回退采用 272000 Token 标准窗口、872000 Token 扩展上限并支持高速模式；显示回退项不代表服务端已向账号开放该模型。
 
 ### GPT-6 Astra 上下文
 

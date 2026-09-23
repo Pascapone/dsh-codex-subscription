@@ -13,10 +13,19 @@ const base = [{
   cost: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 }, contextWindow: 128_000, maxTokens: 128_000,
 }]
 
-test('offline catalog does not resurrect retired Spark or prematurely remove GPT-5.5', () => {
+test('offline catalog adds GPT-6 fallbacks without resurrecting retired Spark', () => {
   const catalog = createOfficialModelCatalog()
-  const fallback = [{ id: 'gpt-5.3-codex-spark' }, { id: 'gpt-5.5' }, { id: 'gpt-5.6-luna' }]
-  assert.deepEqual(catalog.getModels(fallback).map(model => model.id), ['gpt-5.5', 'gpt-5.6-luna'])
+  const fallback = openaiCodexProvider().getModels()
+  const models = catalog.getModels(fallback)
+  assert.deepEqual(models.slice(0, 2).map(model => model.id), ['gpt-6-luna', 'gpt-6-sol'])
+  assert.equal(models.some(model => model.id === 'gpt-5.3-codex-spark'), false)
+  assert.equal(models.some(model => model.id === 'gpt-5.5'), true)
+  assert.deepEqual(models[0].thinkingLevelMap, {
+    off: null, minimal: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max',
+  })
+  assert.equal(models[0].contextWindow, 272_000)
+  assert.equal(models[0].maxContextWindow, 872_000)
+  assert.equal(models[0].compat.supportsAdditionalTools, true)
 })
 
 const remote = (overrides = {}) => ({
@@ -218,7 +227,7 @@ test('catalog timeout rejects even when an injected request ignores abort and dr
   resolveFetch(Response.json({ models: [remote({ slug: 'late-model' })] }))
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(catalog.revision(), 0)
-  assert.deepEqual(catalog.getModels(base), base)
+  assert.deepEqual(catalog.getModels(base).map(model => model.id), ['gpt-6-luna', 'gpt-6-sol', 'gpt-base'])
 })
 
 test('clear aborts the old flight without letting its timer invalidate the replacement', async () => {
