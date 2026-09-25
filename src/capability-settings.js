@@ -39,6 +39,7 @@ export function readCapabilitySettings(value = {}) {
     [SEARCH_MODE_FIELD]: SEARCH_MODES.includes(value[SEARCH_MODE_FIELD]) ? value[SEARCH_MODE_FIELD] : 'live',
     [SEARCH_DOMAINS_FIELD]: normalizeSearchDomains(value[SEARCH_DOMAINS_FIELD] ?? []),
     [QUOTA_ALERTS_FIELD]: QUOTA_ALERT_MODES.includes(value[QUOTA_ALERTS_FIELD]) ? value[QUOTA_ALERTS_FIELD] : 'important',
+    transcriptionEnabled: value.transcriptionEnabled === true,
   }
 }
 
@@ -53,6 +54,10 @@ export function capabilityPatch(payload) {
     if (!Object.hasOwn(payload ?? {}, key)) continue
     if (!choices.includes(payload[key])) throw new Error('Invalid capability preference')
     patch[key] = payload[key]
+  }
+  if (Object.hasOwn(payload ?? {}, 'transcriptionEnabled')) {
+    if (typeof payload.transcriptionEnabled !== 'boolean') throw new Error('Invalid transcription preference')
+    patch.transcriptionEnabled = payload.transcriptionEnabled
   }
   if (Object.hasOwn(payload ?? {}, SEARCH_DOMAINS_FIELD)) patch[SEARCH_DOMAINS_FIELD] = normalizeSearchDomains(payload[SEARCH_DOMAINS_FIELD])
   if (Object.hasOwn(payload ?? {}, CUSTOM_CONTEXT_OVERRIDES_FIELD)) {

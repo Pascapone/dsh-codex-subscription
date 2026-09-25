@@ -1,4 +1,5 @@
 import { PREFERENCE_FIELDS } from './preference-fields.js'
+import { decodeTranscriptionAudio } from './codex-transcription.js'
 import { capabilityPatch } from './capability-settings.js'
 import { ORIGINAL_IMAGE_CHUNK_BYTES, ORIGINAL_IMAGE_ID_PATTERN } from './image-original-contract.js'
 import { CUSTOM_CONTEXT_MODEL_CAPS, CUSTOM_CONTEXT_MODEL_FIELDS, CUSTOM_CONTEXT_WINDOW_FIELD, normalizeCustomContextWindow } from './settings-contract.js'
@@ -7,8 +8,21 @@ const publicError = (code, message) => ({
   error: { code, message, details: { issues: [] } },
 })
 
-export function createSubscriptionRpcHandler({ authHandler, usageReader, resetCreditService, preferences, runtimeManagement, diagnosticsReader, modelCatalog, originalImages, resolveInheritedOriginal, closeConnections }) {
+export function createSubscriptionRpcHandler({ authHandler, usageReader, resetCreditService, preferences, runtimeManagement, diagnosticsReader, modelCatalog, originalImages, resolveInheritedOriginal, closeConnections, transcriptionEnabled, transcribeAudio }) {
   return async (endpoint, payload, signal) => {
+    if (endpoint === 'transcription/transcribe') {
+      if (!transcriptionEnabled?.()) return publicError('unavailable', 'Subscription transcription is disabled')
+      let input
+      try { input = decodeTranscriptionAudio(payload) } catch { return publicError('invalid-input', 'Invalid audio recording') }
+      try {
+        signal.throwIfAborted()
+        return { ok: true, value: await transcribeAudio(input, signal) }
+      } catch (error) {
+        if (signal.aborted) throw error
+        return publicError('transcription-failed', error?.message === 'ChatGPT subscription is not signed in' || error?.message === 'ChatGPT sign-in needs to be renewed'
+          ? error.message : 'ChatGPT transcription failed. Try again.')
+      }
+    }
     if (['runtime/status', 'runtime/install', 'runtime/remove', 'runtime/cancel'].includes(endpoint)) {
       try {
         signal.throwIfAborted()

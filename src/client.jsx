@@ -20,6 +20,7 @@ import { NS, CHANNEL, unwrap } from './client-shared.js'
 import { createSubscriptionRpcClient } from './rpc-contract.js'
 import { CodexComposerQuota } from './client-composer-quota.jsx'
 import { CodexModelSelect } from './client-model-select.jsx'
+import { CodexVoiceInput } from './client-voice.jsx'
 import { CodexSection } from './client-section.jsx'
 
 export const inject = [
@@ -70,6 +71,9 @@ export function apply(ctx) {
     name: 'settings.section', id: 'codex-subscription', order: 15,
     label: () => t('nav'), locale: NS, inject: () => ({ preference, rpc: rpc, accountStatus, t }),
   }, CodexSection))
+  ctx.slots.inject('conversation.input.activity', () => ctx.slots.register({
+    name: 'conversation.input.activity', locale: NS, inject: () => ({ preference, rpc, t }),
+  }, CodexVoiceInput))
   const sessions = ctx.get('sessions')
   const installDirectorySlots = scope => {
     const modelDirectories = scope.get('modelDirectories')

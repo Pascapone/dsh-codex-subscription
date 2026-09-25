@@ -100,6 +100,14 @@ export function PreferencesCard({ preference, rpc, t, section = "display" }) {
         <div className="codexSubscriptionDivider" />
         <ContextWindowPreference preference={preference} t={t} />
       </section>
+      <section className="codexSubscriptionCard codexSubscriptionPreferencesCard" aria-label={t('transcriptionTitle')}>
+        <div className="codexSubscriptionPreference">
+          <div className="codexSubscriptionPreferenceCopy"><span className="codexSubscriptionPreferenceLabel">{t('transcriptionTitle')}</span><span className="codexSubscriptionPreferenceHint">{t('transcriptionHint')}</span></div>
+          <div className="codexSubscriptionQuotaModes" role="radiogroup" aria-label={t('transcriptionTitle')} aria-busy={snapshot.saving || undefined}>
+            {[false, true].map(value => <label key={String(value)} className="codexSubscriptionQuotaMode"><input type="radio" name="codex-transcription" checked={snapshot.transcriptionEnabled === value} disabled={!snapshot.writable} onChange={() => { void preference.set({ transcriptionEnabled: value }) }} /><span>{t(value ? 'transcription_on' : 'transcription_off')}</span></label>)}
+          </div>
+        </div>
+      </section>
       <section className="codexSubscriptionCard codexSubscriptionPreferencesCard" aria-label={t('connectionTitle')}>
         <div className="codexSubscriptionPreference">
           <div className="codexSubscriptionPreferenceCopy"><span className="codexSubscriptionPreferenceLabel">{t('connectionTitle')} <small>Beta</small></span><span className="codexSubscriptionPreferenceHint">{t('connectionHint')}</span></div>

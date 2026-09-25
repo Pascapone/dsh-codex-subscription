@@ -25,6 +25,7 @@ import { createOfficialModelCatalog } from './model-catalog.js'
 import { readCapabilitySettings, normalizeSearchDomains, CUSTOM_CONTEXT_OVERRIDES_FIELD, SEARCH_MODE_FIELD, SEARCH_MODES, SEARCH_DOMAINS_FIELD, QUOTA_ALERTS_FIELD, QUOTA_ALERT_MODES, QUOTA_THRESHOLD_FIELDS, MAX_CONTEXT_BUDGET } from './capability-settings.js'
 import { CODEX_AUTO_SEARCH_PROVIDER_ID, CODEX_SEARCH_PROVIDER_ID, createCodexAutoSearchProvider, createCodexSearchProvider } from './codex-search.js'
 import { createCodexImageTool } from './codex-images.js'
+import { createCodexTranscriptionProvider } from './codex-transcription.js'
 import { IMAGE_FEATURE_DEFAULTS } from './image-features.js'
 import { watchImageTool } from './image-tool-registration.js'
 import { IMAGE_MODELS, DEFAULT_IMAGE_MODEL } from './image-models.js'
@@ -96,6 +97,7 @@ const settingsFields = {
   [SEARCH_DOMAINS_FIELD]: z.transform(z.array(z.string()).max(20), normalizeSearchDomains).default([]),
   ...Object.fromEntries(QUOTA_THRESHOLD_FIELDS.map(key => [key, z.number().step(1).min(1).max(100).default(20)])),
   [QUOTA_ALERTS_FIELD]: z.union(QUOTA_ALERT_MODES).default('important'),
+  transcriptionEnabled: z.boolean().default(false),
   [LEGACY_QUICK_QUOTA_FIELD]: z.boolean(),
   [CUSTOM_CONTEXT_WINDOW_FIELD]: z.number().step(1).min(128_000).max(1_000_000).default(DEFAULT_CUSTOM_CONTEXT_WINDOW),
   ...Object.fromEntries(Object.entries(CUSTOM_CONTEXT_MODEL_FIELDS).map(([modelKey, field]) => [field, z.number().step(1).min(128_000).max(CUSTOM_CONTEXT_MODEL_CAPS[modelKey]).default(CUSTOM_CONTEXT_MODEL_DEFAULTS[modelKey])])),
@@ -397,6 +399,12 @@ export function apply(ctx, config = {}) {
     resetCreditService,
     preferences,
     runtimeManagement,
+    transcriptionEnabled: () => settings.get().transcriptionEnabled === true,
+    transcribeAudio: createCodexTranscriptionProvider({
+      getAuth: resolveAuth,
+      readCredential: options => store.read(PROVIDER, options),
+      fetch: (input, init) => network.fetch('transcription', input, init),
+    }),
     diagnosticsReader: () => createSubscriptionDiagnostics({ auth, preferences, login: coordinator.supportState(), network, modelCatalog }),
     modelCatalog,
     closeConnections: () => connection.dispose(),

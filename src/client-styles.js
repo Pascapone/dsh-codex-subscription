@@ -225,4 +225,23 @@ export const STYLE = `
 .codexSubscriptionRuntime button{flex-shrink:0;white-space:nowrap}
 .codexSubscriptionRuntime code{display:block;overflow-wrap:anywhere;padding:8px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;user-select:text}
 @media(max-width:640px){.codexSubscriptionCard{padding:14px}}
+.codexVoiceTrigger{display:inline-flex;align-items:center;gap:6px}
+.codexVoiceButton{display:inline-flex;align-items:center;justify-content:center;flex:none;width:32px;height:32px;padding:6px;border:1px solid transparent;border-radius:50%;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer}
+.codexVoiceButton:hover:not(:disabled){background:var(--dsw-alias-bg-layer-2)}
+.codexVoiceButton:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
+.codexVoiceButton:disabled{opacity:.45;cursor:default}
+.codexVoiceButton svg{width:18px;height:18px}
+.codexVoiceControls{display:flex;align-items:center;gap:5px;width:100%;min-width:0}
+.codexVoiceCancel,.codexVoiceControls>.codexVoiceButton:nth-last-child(2){border-color:var(--dsw-alias-border-l2)}
+.codexVoiceSpacer{flex:1}
+.codexVoiceSend{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-base)}
+.codexVoiceSend:hover:not(:disabled){background:var(--dsw-alias-brand-primary)}
+.codexVoiceWave{position:absolute;bottom:calc(100% + 12px);left:24px;right:24px;height:24px;display:flex;align-items:center;justify-content:center;gap:2px;overflow:hidden;color:var(--dsw-alias-label-secondary);font-size:12px;white-space:nowrap;pointer-events:none}
+.codexVoiceWave i{width:2px;max-height:23px;flex:1 1 2px;border-radius:3px;background:var(--dsw-alias-label-secondary)}
+.codexVoiceWave span{overflow:hidden;text-overflow:ellipsis;pointer-events:auto}
+.codexVoiceWave button{border:0;background:transparent;color:var(--dsw-alias-brand-primary);cursor:pointer}
+.codexVoiceError{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-state-error-primary);font-size:11px}
+[data-composer-card]:has(.codexVoiceControls) [data-input-scroll]{visibility:hidden;pointer-events:none}
+/* ponytail: host row markup owns the final submit button; use an official replacement seat if DSH adds one. */
+[data-composer-card] div:has(> div > .codexVoiceControls)>button{display:none}
 `
