@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import { SlotCore } from '@deepseek-ai/dsh-client-ui-slots'
 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
 // These contracts cover the client entry and its authored copy, styles and download helper.
@@ -44,6 +45,22 @@ test('settings exposes one secret-free support diagnostic that can be copied del
   assert.match(source, /JSON\.stringify\(report, null, 2\)/u)
   assert.match(source, /diagnosticsCopy/u)
   assert.doesNotMatch(source, /accessToken|refreshToken|accountId/u)
+})
+
+test('voice yields the single activity slot to another plugin instead of failing Web boot', async () => {
+  const source = await read('src/client.jsx')
+  const priority = Number(/slots\.inject\(['"]conversation\.input\.activity['"], \(\) => ctx\.slots\.register\(\{\s*name:\s*['"]conversation\.input\.activity['"],\s*priority:\s*(-?\d+)/u.exec(source)?.[1])
+  assert.ok(priority > 0)
+  for (const order of [[0, priority], [priority, 0]]) {
+    const slots = new SlotCore()
+    const disposeOwner = slots.register({ name: 'root', children: { 'conversation.input.activity': { kind: 'single', scope: 'session' } } }, () => null)
+    const disposers = order.map(value => slots.register({ name: 'conversation.input.activity', priority: value }, () => null))
+    assert.deepEqual(slots.entries('conversation.input.activity').map(entry => entry.options.priority), [0, priority])
+    disposers[order.indexOf(0)]()
+    assert.deepEqual(slots.entries('conversation.input.activity').map(entry => entry.options.priority), [priority])
+    disposers[order.indexOf(priority)]()
+    disposeOwner()
+  }
 })
 
 test('the English settings navigation label fits the DSH sidebar', async () => {
