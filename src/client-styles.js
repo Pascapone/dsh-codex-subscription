@@ -172,6 +172,15 @@ export const STYLE = `
 .codexModelSelectChevron{flex:none;color:var(--dsw-alias-label-caption);transition:transform 120ms}
 .codexModelSelectTrigger[aria-expanded=true] .codexModelSelectChevron{transform:rotate(180deg)}
 .codexModelSelectMenu{position:absolute;z-index:30;right:0;bottom:calc(100% + 8px);display:flex;flex-direction:column;box-sizing:border-box;width:max-content;min-width:min(240px,calc(100vw - 32px));max-width:min(420px,calc(100vw - 32px));max-height:min(360px,calc(100vh - 96px));padding:4px;border:1px solid var(--dsw-alias-border-inverted);border-radius:12px;background:var(--dsw-specific-menu,var(--dsw-alias-bg-layer-1,#303136));backdrop-filter:var(--dsw-menu-backdrop-filter,blur(40px) saturate(150%));box-shadow:var(--dsw-shadow-lv3);color:var(--dsw-alias-label-primary);overflow-y:auto}
+.codexModelSelectMobileLayer{position:fixed;inset:0;z-index:1200;background:var(--dsw-alias-bg-mask-1)}
+@media(max-width:700px){.codexModelSelectMobileLayer .codexModelSelectMenu{left:0;right:0;bottom:0;width:100%;min-width:0;max-width:none;max-height:min(85dvh,700px);padding:10px 12px max(12px,env(safe-area-inset-bottom));padding-inline:max(12px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-right));border-radius:18px 18px 0 0;background:var(--dsw-alias-bg-layer-1);backdrop-filter:none;animation:codexModelSheetIn .18s ease-out}
+@keyframes codexModelSheetIn{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.codexModelSelectMobileLayer .codexModelSelectMenu{animation:none}}
+.codexModelSelectMobileLayer .codexModelSelectGroups{flex:1;max-height:none}
+.codexModelSelectMobileHeader{display:flex;align-items:center;justify-content:space-between;flex:none;min-height:40px;padding:0 8px;font-size:14px;font-weight:600}
+.codexModelSelectMobileHeader button{display:grid;place-items:center;width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:inherit;cursor:pointer}
+.codexModelSelectMobileHeader button:hover,.codexModelSelectMobileHeader button:focus-visible{background:var(--dsw-alias-interactive-bg-hover);outline:0}
+.codexModelSelectMobileLayer .codexModelSelectError,.codexModelSelectMobileLayer .codexModelSelectWarning{min-width:0;overflow-wrap:anywhere}}
 .codexModelSelectPane{display:flex;min-width:0;min-height:0;flex-direction:column}
 .codexModelSelectBack{display:flex;align-items:center;gap:8px;flex:none;min-height:40px;padding:0 10px;border:0;border-radius:10px;background:transparent;color:inherit;font:inherit;font-size:14px;font-weight:600;text-align:left;cursor:pointer}
 .codexModelSelectBack:hover,.codexModelSelectBack:focus-visible{background:var(--dsw-alias-interactive-bg-hover);outline:0}

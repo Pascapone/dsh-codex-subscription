@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
 import { BoltIcon } from '@heroicons/react/16/solid'
-import { IconCheckOutline16, IconChevronDownOutline14, IconChevronLeftOutline14, IconChevronRightOutline14 } from './client-primitives.js'
+import { IconCheckOutline16, IconChevronDownOutline14, IconChevronLeftOutline14, IconChevronRightOutline14, IconCloseOutline16 } from './client-primitives.js'
 import { OUTPUT_VERBOSITY_DEFAULT, OUTPUT_VERBOSITY_FIELD, OUTPUT_VERBOSITY_HIGH, OUTPUT_VERBOSITY_LOW, OUTPUT_VERBOSITY_MEDIUM, SPEED_MODE_FAST, SPEED_MODE_FIELD, SPEED_MODE_STANDARD, supportsCodexFastMode } from './settings-contract.js'
 import { fill, usePreferenceSnapshot } from './client-shared.js'
 export function CodexModelSelect({ locked, available, directory, load, select, preference, t }) {
@@ -8,9 +9,11 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
   const preferenceSnapshot = usePreferenceSnapshot(preference)
   const [open, setOpen] = useState(false)
   const [pane, setPane] = useState('root')
+  const [mobile, setMobile] = useState(() => window.matchMedia('(max-width:700px)').matches)
   const rootRef = useRef(null)
   const triggerRef = useRef(null)
   const backRef = useRef(null)
+  const menuRef = useRef(null)
   const id = useId()
   const choices = useMemo(() => state.groups.flatMap(group => group.models.map(model => ({
     group,
@@ -57,23 +60,32 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
     if (available) load()
   }, [available, load])
   useEffect(() => {
+    const query = window.matchMedia('(max-width:700px)')
+    const update = () => setMobile(query.matches)
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
+  useEffect(() => {
     if (!open) return undefined
     const closeOutside = event => {
-      if (!rootRef.current?.contains(event.target)) {
+      if (!rootRef.current?.contains(event.target) && !menuRef.current?.contains(event.target)) {
         setOpen(false)
         setPane('root')
+        if (mobile) triggerRef.current?.focus()
       }
     }
-    document.addEventListener('mousedown', closeOutside)
-    return () => document.removeEventListener('mousedown', closeOutside)
-  }, [open])
+    document.addEventListener('pointerdown', closeOutside)
+    return () => document.removeEventListener('pointerdown', closeOutside)
+  }, [open, mobile])
   useEffect(() => {
     if (!speedSupported && pane === 'speed') setPane('root')
     if (!verbositySupported && pane === 'verbosity') setPane('root')
   }, [pane, speedSupported, verbositySupported])
   useEffect(() => {
-    if (open && pane !== 'root') backRef.current?.focus()
-  }, [open, pane])
+    if (!open) return
+    if (pane !== 'root') backRef.current?.focus()
+    else if (mobile) menuRef.current?.querySelector('.codexModelSelectCell')?.focus()
+  }, [open, pane, mobile])
   if (!available) return null
 
   const close = (restoreFocus = false) => {
@@ -126,7 +138,7 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
   const backToRoot = () => {
     const target = pane
     setPane('root')
-    requestAnimationFrame(() => rootRef.current?.querySelector(`[data-pane="${target}"]`)?.focus())
+    requestAnimationFrame(() => menuRef.current?.querySelector(`[data-pane="${target}"]`)?.focus())
   }
   const cell = (target, label, value) => <button
     type="button"
@@ -183,8 +195,27 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
   }
 
   const paneTitle = { model: t('modelLabel'), effort: t('effortLabel'), speed: t('speedTitle'), verbosity: t('verbosityTitle') }[pane]
+  const menu = open ? <div ref={menuRef} className="codexModelSelectMenu" id={`${id}-menu`} role="menu" aria-label={paneTitle ?? t('modelMenuAria')} aria-busy={state.status === 'loading' || busy}>
+    {mobile && pane === 'root' ? <div className="codexModelSelectMobileHeader"><span>{t('modelLabel')}</span><button type="button" role="menuitem" aria-label={t('modelClose')} onClick={() => close(true)}><IconCloseOutline16 /></button></div> : null}
+    {pane === 'root' ? <>
+      {cell('model', t('modelLabel'), modelLabel)}
+      {reasoning === undefined ? null : cell('effort', t('effortLabel'), effortLabel)}
+      {speedSupported && cell('speed', t('speedTitle'), t(fast ? 'speedFast' : 'speedStandard'))}
+      {verbositySupported && cell('verbosity', t('verbosityTitle'), verbosityLabel)}
+    </> : <>
+      <button ref={backRef} className="codexModelSelectBack" type="button" role="menuitem" onClick={backToRoot} aria-label={`${t('modelBack')}: ${paneTitle}`}><IconChevronLeftOutline14 />{paneTitle}</button>
+      {submenu}
+    </>}
+  </div> : null
   return <div className="codexModelSelect" ref={rootRef} onKeyDown={event => {
-    if (event.key !== 'Escape' || !open) return
+    if (!open) return
+    if (event.key === 'Tab' && mobile) {
+      const buttons = [...menuRef.current.querySelectorAll('button:not(:disabled)')]
+      const index = buttons.indexOf(document.activeElement)
+      if (event.shiftKey && index <= 0) { event.preventDefault(); buttons.at(-1)?.focus() }
+      else if (!event.shiftKey && index === buttons.length - 1) { event.preventDefault(); buttons[0]?.focus() }
+    }
+    if (event.key !== 'Escape') return
     event.preventDefault()
     if (pane === 'root') close(true)
     else backToRoot()
@@ -206,17 +237,7 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
       {effortLabel === undefined ? null : <span className="codexModelSelectEffort">{effortLabel}</span>}
       <IconChevronDownOutline14 className="codexModelSelectChevron" />
     </button>
-    {open ? <div className="codexModelSelectMenu" id={`${id}-menu`} role="menu" aria-label={paneTitle ?? t('modelMenuAria')} aria-busy={state.status === 'loading' || busy}>
-      {pane === 'root' ? <>
-        {cell('model', t('modelLabel'), modelLabel)}
-        {reasoning === undefined ? null : cell('effort', t('effortLabel'), effortLabel)}
-        {speedSupported && cell('speed', t('speedTitle'), t(fast ? 'speedFast' : 'speedStandard'))}
-        {verbositySupported && cell('verbosity', t('verbosityTitle'), verbosityLabel)}
-      </> : <>
-        <button ref={backRef} className="codexModelSelectBack" type="button" role="menuitem" onClick={backToRoot} aria-label={`${t('modelBack')}: ${paneTitle}`}><IconChevronLeftOutline14 />{paneTitle}</button>
-        {submenu}
-      </>}
-    </div> : null}
+    {mobile && open ? createPortal(<div className="codexModelSelectMobileLayer" role="dialog" aria-modal="true" aria-label={t('modelMenuAria')}>{menu}</div>, document.body) : menu}
   </div>
 }
 
