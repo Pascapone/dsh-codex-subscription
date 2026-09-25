@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { CHANNEL, unwrap } from './rpc-contract.js'
 import { usePreferenceSnapshot } from './client-shared.js'
+import { appendWave, WAVE_FRAME_MS, WAVE_POINTS } from './voice-waveform.js'
 
 const MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4']
 // ponytail: 120-second capture caps in-memory audio; stream chunks if long dictation is needed.
@@ -10,7 +11,8 @@ const MAX_BYTES = 25 * 1024 * 1024
 export function CodexVoiceInput({ sessionId, inputActions, onActiveChange, locked, preference, rpc, t }) {
   const { transcriptionEnabled } = usePreferenceSnapshot(preference)
   const [phase, setPhase] = useState('idle')
-  const [level, setLevel] = useState(0)
+  const [wave, setWave] = useState(() => Array(WAVE_POINTS).fill(0))
+  const [elapsed, setElapsed] = useState(0)
   const [error, setError] = useState('')
   const [pending, setPending] = useState('')
   const active = useRef(null)
@@ -90,7 +92,7 @@ export function CodexVoiceInput({ sessionId, inputActions, onActiveChange, locke
     const run = ++generation.current
     const recording = { abort: new AbortController(), span: inputActions.captureInsertion(), chunks: [] }
     active.current = recording
-    setError(''); setPending(''); setPhase('permission')
+    setError(''); setPending(''); setElapsed(0); setWave(Array(WAVE_POINTS).fill(0)); setPhase('permission')
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       if (run !== generation.current) { stream.getTracks().forEach(track => track.stop()); return }
@@ -106,16 +108,21 @@ export function CodexVoiceInput({ sessionId, inputActions, onActiveChange, locke
           const context = new AudioContext()
           recording.audioContext = context
           const analyser = context.createAnalyser()
-          analyser.fftSize = 256
+          analyser.fftSize = 2048
           context.createMediaStreamSource(stream).connect(analyser)
           const samples = new Uint8Array(analyser.fftSize)
+          let peak = 6
           recording.waveTimer = setInterval(() => {
             analyser.getByteTimeDomainData(samples)
-            setLevel(Math.sqrt(samples.reduce((sum, sample) => sum + (sample - 128) ** 2, 0) / samples.length) / 64)
-          }, 80)
+            const rms = Math.sqrt(samples.reduce((sum, sample) => sum + (sample - 128) ** 2, 0) / samples.length)
+            peak = Math.max(6, peak * 0.98, rms)
+            setWave(history => appendWave(history, (rms - 1.5) / peak * 1.3))
+            setElapsed(Math.floor((performance.now() - recording.startedAt) / 1000))
+          }, WAVE_FRAME_MS)
         } catch { /* waveform remains idle; microphone capture still works */ }
       }
       recorder.start(250)
+      recording.startedAt = performance.now()
       recording.limitTimer = setTimeout(() => { void finish(false) }, MAX_SECONDS * 1000)
       setPhase('recording')
     } catch (failure) {
@@ -129,10 +136,13 @@ export function CodexVoiceInput({ sessionId, inputActions, onActiveChange, locke
   if (!transcriptionEnabled) return null
   if (phase === 'idle') return <span className="codexVoiceTrigger"><button type="button" className="codexVoiceButton" disabled={locked} title={t('voiceStart')} aria-label={t('voiceStart')} onMouseDown={event => event.preventDefault()} onClick={() => { void start() }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4m-4 0h8"/></svg></button>{error && <span role="alert" className="codexVoiceError">{error}</span>}</span>
   return <div className="codexVoiceControls">
-    <div className="codexVoiceWave" role="status" aria-label={t(phase === 'recording' ? 'voiceRecording' : phase === 'permission' ? 'voicePermission' : 'voiceTranscribing')}>
-      {phase === 'feedback' ? <span>{error} <button type="button" onClick={() => { if (inputActions.insertText(pending, inputActions.captureInsertion())) cancel() }}>{t('voiceInsert')}</button></span>
-        : phase === 'recording' ? Array.from({ length: 74 }, (_, i) => <i key={i} style={{ height: `${Math.max(2, 3 + Math.abs(Math.sin(i * 2.43)) * Math.min(25, level * 35))}px` }} />)
-          : <span>{t(phase === 'permission' ? 'voicePermission' : 'voiceTranscribing')}</span>}
+    <div className="codexVoiceWave" role="status" aria-label={phase === 'feedback' ? error : t(phase === 'recording' ? 'voiceRecording' : phase === 'permission' ? 'voicePermission' : 'voiceTranscribing')}>
+      {phase === 'feedback' ? <span className="codexVoiceFeedback"><span>{error}</span><button type="button" onClick={() => { if (inputActions.insertText(pending, inputActions.captureInsertion())) cancel() }}>{t('voiceInsert')}</button></span>
+        : phase === 'recording' ? <>
+          <span className="codexVoiceLive" aria-hidden="true"><i /></span>
+          <div className="codexVoiceTrace" aria-hidden="true">{wave.map((amplitude, i) => <i key={i} style={{ height: `${Math.round(3 + amplitude * 33)}px`, opacity: 0.35 + amplitude * 0.65 }} />)}</div>
+          <span className="codexVoiceTime" aria-hidden="true">{Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')}</span>
+        </> : <span>{t(phase === 'permission' ? 'voicePermission' : 'voiceTranscribing')}</span>}
     </div>
     <button type="button" className="codexVoiceButton codexVoiceCancel" aria-label={t('voiceCancel')} title={t('voiceCancel')} onClick={() => cancel()}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
     <span className="codexVoiceSpacer" />

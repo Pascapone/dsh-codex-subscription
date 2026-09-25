@@ -231,17 +231,23 @@ export const STYLE = `
 .codexVoiceButton:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
 .codexVoiceButton:disabled{opacity:.45;cursor:default}
 .codexVoiceButton svg{width:18px;height:18px}
-.codexVoiceControls{display:flex;align-items:center;gap:5px;width:100%;min-width:0}
+.codexVoiceControls{position:relative;display:flex;align-items:center;gap:5px;width:100%;min-width:0}
 .codexVoiceCancel,.codexVoiceControls>.codexVoiceButton:nth-last-child(2){border-color:var(--dsw-alias-border-l2)}
 .codexVoiceSpacer{flex:1}
 .codexVoiceSend{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-base)}
 .codexVoiceSend:hover:not(:disabled){background:var(--dsw-alias-brand-primary)}
-.codexVoiceWave{position:absolute;bottom:calc(100% + 12px);left:24px;right:24px;height:24px;display:flex;align-items:center;justify-content:center;gap:2px;overflow:hidden;color:var(--dsw-alias-label-secondary);font-size:12px;white-space:nowrap;pointer-events:none}
-.codexVoiceWave i{width:2px;max-height:23px;flex:1 1 2px;border-radius:3px;background:var(--dsw-alias-label-secondary)}
-.codexVoiceWave span{overflow:hidden;text-overflow:ellipsis;pointer-events:auto}
-.codexVoiceWave button{border:0;background:transparent;color:var(--dsw-alias-brand-primary);cursor:pointer}
+.codexVoiceWave{position:absolute;bottom:calc(100% + 16px);left:6px;right:6px;height:40px;display:flex;align-items:center;justify-content:center;gap:10px;overflow:hidden;color:var(--dsw-alias-label-secondary);font-size:12px;pointer-events:none}
+.codexVoiceLive{flex:none;width:10px;display:grid;place-items:center}
+.codexVoiceLive i{width:8px;height:8px;border-radius:50%;background:var(--dsw-alias-state-error-primary)}
+.codexVoiceTrace{display:flex;align-items:center;justify-content:center;gap:2px;flex:1;min-width:0;height:100%;overflow:hidden}
+.codexVoiceTrace i{flex:1 1 2px;min-width:1px;max-width:6px;border-radius:3px;background:var(--dsw-alias-brand-primary);transition:height 50ms ease-out}
+.codexVoiceTime{flex:none;min-width:4ch;text-align:right;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-secondary)}
+.codexVoiceFeedback{display:flex;align-items:center;gap:8px;min-width:0;max-width:100%;pointer-events:auto}
+.codexVoiceFeedback span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.codexVoiceWave button{flex:none;border:0;background:transparent;color:var(--dsw-alias-brand-primary);cursor:pointer}
 .codexVoiceError{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-state-error-primary);font-size:11px}
-[data-composer-card]:has(.codexVoiceControls) [data-input-scroll]{visibility:hidden;pointer-events:none}
+[data-composer-card]:has(.codexVoiceControls) [data-input-scroll]{height:48px;max-height:48px;overflow:hidden;visibility:hidden;pointer-events:none}
+@media(prefers-reduced-motion:reduce){.codexVoiceTrace i{transition:none}}
 /* ponytail: host row markup owns the final submit button; use an official replacement seat if DSH adds one. */
 [data-composer-card] div:has(> div > .codexVoiceControls)>button{display:none}
 `

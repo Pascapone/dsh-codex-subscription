@@ -72,7 +72,7 @@ export function apply(ctx) {
     label: () => t('nav'), locale: NS, inject: () => ({ preference, rpc: rpc, accountStatus, t }),
   }, CodexSection))
   ctx.slots.inject('conversation.input.activity', () => ctx.slots.register({
-    name: 'conversation.input.activity', locale: NS, inject: () => ({ preference, rpc, t }),
+    name: 'conversation.input.activity', priority: 10, locale: NS, inject: () => ({ preference, rpc, t }),
   }, CodexVoiceInput))
   const sessions = ctx.get('sessions')
   const installDirectorySlots = scope => {
