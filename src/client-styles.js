@@ -256,6 +256,6 @@ export const STYLE = `
 .codexVoiceError{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-state-error-primary);font-size:11px}
 [data-composer-card]:has(.codexVoiceControls) [data-input-scroll]{height:48px;max-height:48px;overflow:hidden;visibility:hidden;pointer-events:none}
 @media(prefers-reduced-motion:reduce){.codexVoiceTrace i{transition:none}}
-/* ponytail: host row markup owns the final submit button; use an official replacement seat if DSH adds one. */
-[data-composer-card] div:has(> div > .codexVoiceControls)>button{display:none}
+/* ponytail: host row owns submit; use an official replacement seat if DSH adds one. */
+[data-composer-card] div:has(.codexVoiceControls):not(.codexVoiceControls)>button{display:none}
 `
