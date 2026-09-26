@@ -108,6 +108,7 @@ export function apply(ctx) {
           load: () => { if (available) void directory.load() },
           select: selection => available ? directory.select(selection).then(() => true, () => false) : Promise.resolve(false),
           preference,
+          sessionId,
         }
       },
     }, CodexModelSelect))

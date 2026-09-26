@@ -14,6 +14,7 @@ export const SEARCH_PROVIDER_DSH = 'dsh'
 export const SEARCH_PROVIDER_CODEX = 'codex'
 export const DEFAULT_SEARCH_PROVIDER = SEARCH_PROVIDER_AUTO
 export const SPEED_MODE_FIELD = 'speedMode'
+export const SESSION_SPEED_MODES_FIELD = 'sessionSpeedModes'
 export const SPEED_MODE_STANDARD = 'standard'
 export const SPEED_MODE_FAST = 'fast'
 export const DEFAULT_SPEED_MODE = SPEED_MODE_STANDARD

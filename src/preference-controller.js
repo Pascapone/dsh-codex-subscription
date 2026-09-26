@@ -17,6 +17,7 @@ import {
   QUICK_QUOTA_MODE_FIELD,
   SEARCH_PROVIDER_FIELD,
   SPEED_MODE_FIELD,
+  SESSION_SPEED_MODES_FIELD,
 } from './settings-contract.js'
 import { readCapabilitySettings, CUSTOM_CONTEXT_OVERRIDES_FIELD } from './capability-settings.js'
 
@@ -29,6 +30,7 @@ export function createPreferenceController(scope, rpc) {
   let fallback
   let pendingPatch
   let failedPatch
+  const pendingSpeeds = new Map()
   let generation = 0
   let contextModels = []
   let verbosityModels = []
@@ -69,6 +71,7 @@ export function createPreferenceController(scope, rpc) {
       ),
       searchProvider: normalizeSearchProvider(value?.[SEARCH_PROVIDER_FIELD]),
       speedMode: normalizeSpeedMode(value?.[SPEED_MODE_FIELD]),
+      sessionSpeedModes: { ...value?.[SESSION_SPEED_MODES_FIELD], ...Object.fromEntries(pendingSpeeds) },
       outputVerbosity: normalizeOutputVerbosity(value?.[OUTPUT_VERBOSITY_FIELD]),
       contextMode: normalizeContextMode(value?.[CONTEXT_MODE_FIELD]),
       customContextWindow: normalizeCustomContextWindow(value?.[CUSTOM_CONTEXT_WINDOW_FIELD]),
@@ -94,6 +97,9 @@ export function createPreferenceController(scope, rpc) {
     for (const listener of listeners) listener()
   }
   const disposeScope = scope.subscribe(() => {
+    for (const [id, mode] of pendingSpeeds) {
+      if (nativeSnapshot().value?.[SESSION_SPEED_MODES_FIELD]?.[id] === mode) pendingSpeeds.delete(id)
+    }
     error = false
     if (!updating) failedPatch = undefined
     publish()
@@ -121,6 +127,7 @@ export function createPreferenceController(scope, rpc) {
         ),
         [SEARCH_PROVIDER_FIELD]: normalizeSearchProvider(value?.[SEARCH_PROVIDER_FIELD]),
         [SPEED_MODE_FIELD]: normalizeSpeedMode(value?.[SPEED_MODE_FIELD]),
+        [SESSION_SPEED_MODES_FIELD]: value?.[SESSION_SPEED_MODES_FIELD] ?? {},
         [OUTPUT_VERBOSITY_FIELD]: normalizeOutputVerbosity(value?.[OUTPUT_VERBOSITY_FIELD]),
         [CONTEXT_MODE_FIELD]: normalizeContextMode(value?.[CONTEXT_MODE_FIELD]),
         [CUSTOM_CONTEXT_WINDOW_FIELD]: normalizeCustomContextWindow(value?.[CUSTOM_CONTEXT_WINDOW_FIELD]),
@@ -233,6 +240,26 @@ export function createPreferenceController(scope, rpc) {
       }
     }
   }
+  const setSpeed = async (sessionId, speedMode) => {
+    if (disposed || snapshot.status !== 'ready' || snapshot.writable !== true) return
+    updating = true
+    error = false
+    pendingSpeeds.set(sessionId, speedMode)
+    publish()
+    try {
+      const value = unwrap(await rpc.call(CHANNEL, 'preferences/update', { sessionId, speedMode }))
+      if (nativeSnapshot().status !== 'ready') {
+        acceptFallback(value)
+        pendingSpeeds.delete(sessionId)
+      }
+    } catch {
+      pendingSpeeds.delete(sessionId)
+      error = true
+    } finally {
+      updating = false
+      publish()
+    }
+  }
   return {
     getSnapshot: () => snapshot,
     subscribe: listener => {
@@ -241,6 +268,7 @@ export function createPreferenceController(scope, rpc) {
     },
     load,
     set,
+    setSpeed,
     retry: () => failedPatch === undefined ? load() : set(failedPatch),
     refreshModels,
     dispose: () => {

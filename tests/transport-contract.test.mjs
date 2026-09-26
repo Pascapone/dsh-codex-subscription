@@ -225,8 +225,8 @@ test('subscription fast mode reaches only officially supported Codex model reque
   }
 
   try {
-    let speedMode = 'fast'
-    const provider = openaiCodexSubscriptionProvider({ resolveSpeedMode: () => speedMode })
+    const speeds = { 'session-fast': 'fast' }
+    const provider = openaiCodexSubscriptionProvider({ resolveSpeedMode: sessionId => speeds[sessionId] })
     const profiles = new Map([['openai-codex', {
       provider: 'openai-codex',
       displayName: 'ChatGPT subscription',
@@ -239,27 +239,31 @@ test('subscription fast mode reaches only officially supported Codex model reque
       profiles: () => profiles,
       resolveApiKey: async () => jwt('account-fast'),
     })
-    const run = async modelId => {
+    const run = async (modelId, sessionId) => {
       let text = ''
       for await (const chunk of adapter.stream({
         provider: 'openai-codex',
         model: modelId,
         messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
-        sessionId: `session-${modelId}`,
+        sessionId,
       })) {
         if (chunk.type === 'text-delta') text += chunk.text
       }
       assert.equal(text, 'ok')
     }
 
-    await run('gpt-5.6-sol')
-    await run('gpt-5.3-codex-spark')
-    speedMode = 'standard'
-    await run('gpt-5.6-sol')
+    await run('gpt-5.6-sol', 'session-fast')
+    await run('gpt-5.3-codex-spark', 'session-fast')
+    await run('gpt-5.6-sol', 'session-standard')
+    await run('gpt-5.6-sol', 'session-fast')
+    speeds['session-fast'] = 'standard'
+    await run('gpt-5.6-sol', 'session-fast')
 
     assert.equal(wires[0].service_tier, 'priority')
     assert.equal('service_tier' in wires[1], false)
     assert.equal('service_tier' in wires[2], false)
+    assert.equal(wires[3].service_tier, 'priority')
+    assert.equal('service_tier' in wires[4], false)
   } finally {
     globalThis.fetch = previousFetch
   }

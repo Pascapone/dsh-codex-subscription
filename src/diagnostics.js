@@ -65,7 +65,6 @@ export async function createSubscriptionDiagnostics({ auth, preferences, login =
       quickQuotaMode: preference.quickQuotaMode,
       ...(typeof preference.outputVerbosity === 'string' ? { outputVerbosity: preference.outputVerbosity } : {}),
       searchProvider: preference.searchProvider,
-      speedMode: preference.speedMode,
       writable: preference.writable === true,
     },
     issues,

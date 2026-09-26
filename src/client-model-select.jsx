@@ -2,9 +2,9 @@ import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } fro
 import { createPortal } from 'react-dom'
 import { BoltIcon } from '@heroicons/react/16/solid'
 import { IconCheckOutline16, IconChevronDownOutline14, IconChevronLeftOutline14, IconChevronRightOutline14, IconCloseOutline16 } from './client-primitives.js'
-import { OUTPUT_VERBOSITY_DEFAULT, OUTPUT_VERBOSITY_FIELD, OUTPUT_VERBOSITY_HIGH, OUTPUT_VERBOSITY_LOW, OUTPUT_VERBOSITY_MEDIUM, SPEED_MODE_FAST, SPEED_MODE_FIELD, SPEED_MODE_STANDARD, supportsCodexFastMode } from './settings-contract.js'
+import { OUTPUT_VERBOSITY_DEFAULT, OUTPUT_VERBOSITY_FIELD, OUTPUT_VERBOSITY_HIGH, OUTPUT_VERBOSITY_LOW, OUTPUT_VERBOSITY_MEDIUM, SPEED_MODE_FAST, SPEED_MODE_STANDARD, supportsCodexFastMode } from './settings-contract.js'
 import { fill, usePreferenceSnapshot } from './client-shared.js'
-export function CodexModelSelect({ locked, available, directory, load, select, preference, t }) {
+export function CodexModelSelect({ locked, available, directory, load, select, preference, sessionId, t }) {
   const state = useSyncExternalStore(directory.subscribe, directory.getSnapshot)
   const preferenceSnapshot = usePreferenceSnapshot(preference)
   const [open, setOpen] = useState(false)
@@ -44,7 +44,7 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
   const modelLabel = currentChoice?.model.name ?? t('selectModel')
   const speedSupported = state.current?.provider === 'openai-codex' && (preferenceSnapshot.fastModels?.includes(state.current?.model) ?? supportsCodexFastMode(state.current?.model))
   const speedWritable = preferenceSnapshot.status === 'ready' && preferenceSnapshot.writable === true
-  const fast = speedSupported && preferenceSnapshot.speedMode === SPEED_MODE_FAST
+  const fast = speedSupported && preferenceSnapshot.sessionSpeedModes?.[sessionId] === SPEED_MODE_FAST
   const verbositySupported = state.current?.provider === 'openai-codex' && preferenceSnapshot.verbosityModels.includes(state.current?.model)
   const verbosityWritable = preferenceSnapshot.status === 'ready' && preferenceSnapshot.writable === true
   const verbosityItems = [
@@ -117,7 +117,7 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
   }
   const chooseSpeed = speedMode => {
     close(true)
-    void preference.set({ [SPEED_MODE_FIELD]: speedMode })
+    void preference.setSpeed(sessionId, speedMode)
   }
   const chooseVerbosity = outputVerbosity => {
     close(true)

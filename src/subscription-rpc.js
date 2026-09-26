@@ -2,7 +2,7 @@ import { PREFERENCE_FIELDS } from './preference-fields.js'
 import { decodeTranscriptionAudio } from './codex-transcription.js'
 import { capabilityPatch } from './capability-settings.js'
 import { ORIGINAL_IMAGE_CHUNK_BYTES, ORIGINAL_IMAGE_ID_PATTERN } from './image-original-contract.js'
-import { CUSTOM_CONTEXT_MODEL_CAPS, CUSTOM_CONTEXT_MODEL_FIELDS, CUSTOM_CONTEXT_WINDOW_FIELD, normalizeCustomContextWindow } from './settings-contract.js'
+import { CUSTOM_CONTEXT_MODEL_CAPS, CUSTOM_CONTEXT_MODEL_FIELDS, CUSTOM_CONTEXT_WINDOW_FIELD, normalizeCustomContextWindow, SPEED_MODE_FAST, SPEED_MODE_STANDARD } from './settings-contract.js'
 const publicError = (code, message) => ({
   ok: false,
   error: { code, message, details: { issues: [] } },
@@ -88,6 +88,15 @@ export function createSubscriptionRpcHandler({ authHandler, usageReader, resetCr
       try {
         signal.throwIfAborted()
         if (endpoint === 'preferences/update') {
+          if (Object.hasOwn(payload ?? {}, 'sessionId')) {
+            if (typeof payload.sessionId !== 'string' || payload.sessionId.length < 1 || payload.sessionId.length > 512
+              || ![SPEED_MODE_STANDARD, SPEED_MODE_FAST].includes(payload.speedMode)
+              || Object.keys(payload).some(key => !['sessionId', 'speedMode'].includes(key))) {
+              return publicError('invalid-input', 'Invalid session speed preference')
+            }
+            await preferences.setSpeed(payload.sessionId, payload.speedMode)
+            return { ok: true, value: preferences.status() }
+          }
           const patch = capabilityPatch(payload)
           for (const [field, rule] of Object.entries(PREFERENCE_FIELDS)) {
             if (!Object.hasOwn(payload ?? {}, field)) continue

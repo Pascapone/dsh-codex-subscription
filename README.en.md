@@ -230,7 +230,7 @@ Flare / Sunburst request overrides remain experimental: successful generation do
 
 ### Composer speed
 
-With a supported Codex model selected, open the composer's model menu to choose Standard or Fast.
+With a supported Codex model selected, open the composer's model menu to choose Standard or Fast. Speed is saved per session; existing sessions start in Standard until you enable Fast in each one.
 Standard adds no icon; only Fast shows a lightning icon before the model name. Spark does not show the speed entry. Fast mode increases speed and uses more Credits;
 see the [OpenAI Codex Speed documentation](https://learn.chatgpt.com/docs/agent-configuration/speed) for the current rules.
 

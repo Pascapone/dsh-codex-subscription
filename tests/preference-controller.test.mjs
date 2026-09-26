@@ -92,6 +92,23 @@ function deferredModelHarness() {
   return { controller: createPreferenceController(scope, rpc), pendingModels, listeners }
 }
 
+test('session speed does not leak into another session and rolls back failed saves', async () => {
+  let rejectWrite
+  const { controller } = harness({ rpcCall: (_channel, method, payload) => {
+    if (method !== 'preferences/update') return Promise.resolve({ ok: true, value: {} })
+    assert.deepEqual(payload, { sessionId: 'session-a', speedMode: 'fast' })
+    return new Promise((_resolve, reject) => { rejectWrite = reject })
+  } })
+  const pending = controller.setSpeed('session-a', 'fast')
+  assert.equal(controller.getSnapshot().sessionSpeedModes['session-a'], 'fast')
+  assert.equal(controller.getSnapshot().sessionSpeedModes['session-b'], undefined)
+  rejectWrite(new Error('failed'))
+  await pending
+  assert.equal(controller.getSnapshot().sessionSpeedModes['session-a'], undefined)
+  assert.equal(controller.getSnapshot().error, true)
+  controller.dispose()
+})
+
 test('preference save reflects the chosen value while keeping ready surfaces mounted', async () => {
   const { controller, settle } = harness()
   const pending = controller.set({ [CONTEXT_MODE_FIELD]: CONTEXT_MODE_EXTENDED })

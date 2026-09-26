@@ -60,7 +60,7 @@ export function openaiCodexSubscriptionProvider({
         ? metadata?.defaultVerbosity ?? 'medium'
         : requestedVerbosity
       : undefined
-    const fast = resolveSpeedMode() === SPEED_MODE_FAST
+    const fast = resolveSpeedMode(options.sessionId) === SPEED_MODE_FAST
       && (metadata?.supportsFast ?? supportsCodexFastMode(model?.id))
     const onPayload = options.onPayload
     return {
