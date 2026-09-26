@@ -1,4 +1,4 @@
-import { useLayoutEffect, useSyncExternalStore } from 'react'
+import { useEffect, useLayoutEffect, useSyncExternalStore } from 'react'
 import { usePreferenceSnapshot } from './client-shared.js'
 
 export function CodexVoiceInput({ sessionId, inputActions, onActiveChange, locked, preference, voice, t }) {
@@ -6,6 +6,13 @@ export function CodexVoiceInput({ sessionId, inputActions, onActiveChange, locke
   const { phase, wave, elapsed, error, hasText, inserted, sessionId: recordingSessionId } = useSyncExternalStore(voice.subscribe, voice.getSnapshot)
   const visible = transcriptionEnabled && phase !== 'idle' && sessionId === recordingSessionId
   useLayoutEffect(() => { onActiveChange(visible); return () => onActiveChange(false) }, [visible, sessionId, onActiveChange])
+  useEffect(() => {
+    if (!visible) return
+    let cancelled = false
+    // The resident InputBar resets activity in its passive session-change effect.
+    queueMicrotask(() => { if (!cancelled) onActiveChange(true) })
+    return () => { cancelled = true }
+  }, [visible, sessionId, onActiveChange])
   if (!transcriptionEnabled || (phase !== 'idle' && !visible)) return null
   if (phase === 'idle') return <span className="codexVoiceTrigger"><button type="button" className="codexVoiceButton" disabled={locked} title={t('voiceStart')} aria-label={t('voiceStart')} onMouseDown={event => event.preventDefault()} onClick={() => { void voice.start(sessionId, inputActions, locked) }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4m-4 0h8"/></svg></button>{error && <span role="alert" className="codexVoiceError">{error}</span>}</span>
   return <div className="codexVoiceControls">
