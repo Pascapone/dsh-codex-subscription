@@ -5,8 +5,8 @@ const MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=op
 const MAX_BYTES = 25 * 1024 * 1024
 const silentWave = () => Array(WAVE_POINTS).fill(0)
 
-export function createVoiceController(sessions, rpc, t) {
-  let state = { phase: 'idle', wave: silentWave(), elapsed: 0, error: '', sessionId: null, hasText: false }
+export function createVoiceController(sessions, rpc, t, conversation) {
+  let state = { phase: 'idle', wave: silentWave(), elapsed: 0, error: '', sessionId: null, hasText: false, inserted: false }
   let active = null
   const listeners = new Set()
   const publish = patch => { state = { ...state, ...patch }; listeners.forEach(listener => listener()) }
@@ -20,7 +20,7 @@ export function createVoiceController(sessions, rpc, t) {
     const recording = active
     active = null
     if (recording) { recording.abort.abort(); releaseMedia(recording); recording.reference.release() }
-    publish({ phase: 'idle', error: '', sessionId: null, hasText: false })
+    publish({ phase: 'idle', error: '', sessionId: null, hasText: false, inserted: false })
   }
   const fail = (recording, failure) => {
     if (active !== recording) return
@@ -29,6 +29,42 @@ export function createVoiceController(sessions, rpc, t) {
         : [t('voiceEmpty'), t('voiceLarge')].includes(failure?.message) ? failure.message : t('voiceFailed')
     publish({ phase: 'feedback', error: message })
   }
+  const submitDraft = recording => new Promise((resolve, reject) => {
+    const session = recording.reference.binding.session
+    const input = conversation.input.for(recording.reference.binding.ctx)
+    const initial = session.getSnapshot()
+    const before = new Set(initial.pendingSubmissions.map(item => item.requestId))
+    let requestId, done = false, unsubscribe = () => {}, unwatch = () => {}
+    const abort = () => settle(new Error(t('voiceFailed')))
+    const settle = error => {
+      if (done) return
+      done = true
+      unsubscribe()
+      unwatch()
+      recording.abort.signal.removeEventListener('abort', abort)
+      if (error) reject(error)
+      else resolve()
+    }
+    const check = () => {
+      const snapshot = session.getSnapshot()
+      requestId ??= snapshot.pendingSubmissions.find(item => !before.has(item.requestId))?.requestId
+      if (requestId && !snapshot.pendingSubmissions.some(item => item.requestId === requestId)) {
+        queueMicrotask(() => {
+          const failure = session.getSnapshot().promptError
+          settle(failure ? new Error(failure.error.message) : null)
+        })
+      } else if (!requestId && snapshot.promptError && snapshot.promptError !== initial.promptError) {
+        settle(new Error(snapshot.promptError.error.message))
+      } else if (!requestId && input.state.getSnapshot().phase === 'plain' && input.state.getSnapshot().draft.includes(recording.text)) {
+        // A local serialization/upload failure restores the draft without ever opening a Host submission.
+        queueMicrotask(() => { if (!done && !requestId && input.state.getSnapshot().phase === 'plain' && input.state.getSnapshot().draft.includes(recording.text)) settle(new Error(t('voiceFailed'))) })
+      }
+    }
+    unsubscribe = session.subscribe(check)
+    unwatch = input.state.subscribe(check)
+    recording.abort.signal.addEventListener('abort', abort, { once: true })
+    try { recording.inputActions.submit(); check() } catch (error) { settle(error) }
+  })
   const deliver = async recording => {
     if (active !== recording) return
     publish({ phase: 'transcribing', error: '' })
@@ -45,14 +81,16 @@ export function createVoiceController(sessions, rpc, t) {
         publish({ hasText: true })
       }
       if (active !== recording) return
-      if (recording.send) {
-        // Prompt is session-addressed and returns an acceptance result; a changed draft stays untouched.
-        const result = await recording.reference.binding.session.prompt([{ type: 'text', text: recording.text }], 'queue', recording.abort.signal)
-        if (!result.ok) throw new Error(result.error?.message || t('voiceFailed'))
-      } else if (!recording.inputActions.insertText(recording.text, recording.span)) {
-        publish({ phase: 'feedback', error: t('voiceChanged') })
-        return
+      if (!recording.inserted) {
+        const span = recording.send ? recording.inputActions.captureInsertion() : recording.span
+        if (!recording.inputActions.insertText(recording.text, span)) {
+          publish({ phase: 'feedback', error: t('voiceChanged') })
+          return
+        }
+        recording.inserted = true
+        publish({ inserted: true })
       }
+      if (recording.send) await submitDraft(recording)
       if (active === recording) cancel()
     } catch (failure) { fail(recording, failure) }
   }
@@ -84,7 +122,7 @@ export function createVoiceController(sessions, rpc, t) {
     try { recording.reference = sessions.retain(sessionId, { source: 'controllerOperation' }) }
     catch { publish({ error: t('voiceFailed') }); return }
     active = recording
-    publish({ phase: 'permission', sessionId, error: '', elapsed: 0, wave: silentWave(), hasText: false })
+    publish({ phase: 'permission', sessionId, error: '', elapsed: 0, wave: silentWave(), hasText: false, inserted: false })
     try {
       await recording.reference.ready
       if (active !== recording) return
@@ -135,10 +173,11 @@ export function createVoiceController(sessions, rpc, t) {
   const insert = () => {
     const recording = active
     if (!recording?.text) return
-    if (recording.inputActions.insertText(recording.text, recording.inputActions.captureInsertion())) cancel()
+    if (recording.inserted || recording.inputActions.insertText(recording.text, recording.inputActions.captureInsertion())) cancel()
   }
   return {
-    getSnapshot: () => state, subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener) },
+    getSnapshot: () => state, getRecordingSession: () => state.phase === 'recording' ? state.sessionId : null,
+    subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener) },
     start, finish, cancel, insert, retry: () => { if (active) void deliver(active) },
     dispose: () => { cancel(); listeners.clear() },
   }

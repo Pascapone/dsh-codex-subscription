@@ -240,6 +240,7 @@ export const STYLE = `
 .codexVoiceButton:disabled{opacity:.45;cursor:default}
 .codexVoiceButton svg{width:18px;height:18px}
 .codexVoiceControls{position:relative;display:flex;align-items:center;gap:5px;width:100%;min-width:0}
+[data-composer-card]:has(.codexVoiceControls) div:has(> .codexVoiceControls),[data-composer-card]:has(.codexVoiceControls) div:has(> div > .codexVoiceControls){flex:1;min-width:0;margin-left:0}
 .codexVoiceCancel,.codexVoiceControls>.codexVoiceButton:nth-last-child(2){border-color:var(--dsw-alias-border-l2)}
 .codexVoiceSpacer{flex:1}
 .codexVoiceSend{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-base)}
@@ -258,4 +259,7 @@ export const STYLE = `
 @media(prefers-reduced-motion:reduce){.codexVoiceTrace i{transition:none}}
 /* ponytail: host row owns submit; use an official replacement seat if DSH adds one. */
 [data-composer-card] div:has(.codexVoiceControls):not(.codexVoiceControls)>button{display:none}
+.codexVoiceAnnouncement{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@keyframes codexVoicePulse{from{opacity:.4}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){[data-row-key^="session:"]>span:first-child::after{animation:none!important}}
 `

@@ -506,3 +506,15 @@ test('voice waveform replaces the draft and retains three seconds of distinct au
   assert.match(styles, /\[data-composer-card\]:has\(\.codexVoiceControls\) \[data-input-scroll\]\{height:48px/u)
   assert.match(voice, /appendWave\(state\.wave,/u)
 })
+
+test('voice controls stay in the originating session and keep full width after navigation', async () => {
+  const [component, styles, client] = await Promise.all([
+    read('src/client-voice.jsx'), read('src/client-styles.js'), read('src/client.jsx'),
+  ])
+  assert.match(component, /sessionId === recordingSessionId/u)
+  assert.match(component, /onActiveChange\(visible\)/u)
+  assert.match(component, /phase !== 'idle' && !visible/u)
+  assert.match(styles, /div:has\(> div > \.codexVoiceControls\)\{flex:1;min-width:0;margin-left:0\}/u)
+  assert.match(component, /CSS\.escape\(`session:\$\{sessionId\}`\)/u)
+  assert.match(client, /name: 'shell\.overlay', id: 'codex-voice-recording'/u)
+})

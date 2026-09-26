@@ -20,7 +20,7 @@ import { NS, CHANNEL, unwrap } from './client-shared.js'
 import { createSubscriptionRpcClient } from './rpc-contract.js'
 import { CodexComposerQuota } from './client-composer-quota.jsx'
 import { CodexModelSelect } from './client-model-select.jsx'
-import { CodexVoiceInput } from './client-voice.jsx'
+import { CodexVoiceInput, CodexVoiceSidebarIndicator } from './client-voice.jsx'
 import { createVoiceController } from './voice-controller.js'
 import { CodexSection } from './client-section.jsx'
 
@@ -64,7 +64,7 @@ export function apply(ctx) {
     }
   }, 'codex-subscription: preferences and account status')
   const t = ctx.locale.bind(NS)
-  const voice = createVoiceController(ctx.get('sessions'), rpc, t)
+  const voice = createVoiceController(ctx.get('sessions'), rpc, t, ctx.get('conversation'))
   ctx.effect(() => {
     const unsubscribe = preference.subscribe(() => { if (!preference.getSnapshot().transcriptionEnabled) voice.cancel() })
     return () => { unsubscribe(); voice.dispose() }
@@ -80,6 +80,10 @@ export function apply(ctx) {
   ctx.slots.inject('conversation.input.activity', () => ctx.slots.register({
     name: 'conversation.input.activity', priority: 10, locale: NS, inject: () => ({ preference, voice, t }),
   }, CodexVoiceInput))
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay', id: 'codex-voice-recording', order: 21,
+    locale: NS, inject: () => ({ voice, t }),
+  }, CodexVoiceSidebarIndicator))
   const sessions = ctx.get('sessions')
   const installDirectorySlots = scope => {
     const modelDirectories = scope.get('modelDirectories')
