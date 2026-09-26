@@ -23,7 +23,7 @@
   <img src="docs/assets/codex-subscription-overview.webp" width="900" alt="在 DeepSeek Harness 登录 ChatGPT 并使用 Codex 订阅：无需 API Key，支持模型选择和剩余额度显示">
 </p>
 
-已适配 DSH `0.1.7-rc.1` 的插件兼容性检查与设置接口，同时保留已支持版本的兼容。
+已适配 DSH `0.1.7-rc.2` 的插件兼容性检查与设置接口，同时保留已支持版本的兼容。
 
 ## 三步开始
 
@@ -71,16 +71,22 @@
 ### 在插件页面安装（推荐）
 
 1. 打开 DSH 的 **插件 → 添加插件**。
-2. 在 **包名或地址** 输入框中粘贴下面的包名：
+2. 在 **包名或地址** 输入框中粘贴包名：
 
    ```text
    dsh-codex-subscription
    ```
 
+   使用 DSH `0.1.7-rc.2` 时，在 `2.2.1` 发布到 npm 之前，请改填此 Fork 的 GitHub 地址：
+
+   ```text
+   https://github.com/Pascapone/dsh-codex-subscription
+   ```
+
 3. 点击 **安装**，等待安装完成；按页面提示操作，需要重启时先保存工作。
 4. 打开 **设置 → Codex 订阅**，登录 ChatGPT，然后在会话中选择 Codex 模型。
 
-包名不带版本号时安装最新正式版。指定版本时填写 `dsh-codex-subscription@2.1.6`；测试版则使用对应发布说明中的完整版本号。此处只填包名，不要粘贴整条终端命令。安装本插件使用上面的 npm 包名即可，无需填写 GitHub 地址或本地目录。
+此 GitHub 地址安装支持 DSH `0.1.7-rc.2` 的 Fork 版本 `2.2.1`。不带版本号的包名安装 npm 上最新发布的版本，目前尚不包含此更新。此处只填一个包名或地址，不要粘贴整条终端命令。
 
 <details>
 <summary>终端安装（已能运行 dsh 命令）</summary>
@@ -244,15 +250,15 @@ ChatGPT 返回可用重置卡时，设置页会把每张卡分别显示为紧凑
 
 ![可选组件管理实机界面](docs/assets/settings-runtime-current.png)
 
-优先使用上面的 **安装组件** 按钮。正式版 **2.1.6** 会按当前 DSH 版本选择对应组件：DSH `0.1.7-rc.1` 安装组件 `0.1.7-rc.1`，DSH `0.1.5-rc.2` 安装组件 `0.1.5-rc.2`；已安装的 `0.1.5-rc.3` 组件仅在同版本宿主上识别。请不要省略组件版本号或自行改用 `@next`。
+优先使用上面的 **安装组件** 按钮。此 `2.2.1` 版本会按当前 DSH 版本选择对应组件：DSH `0.1.7-rc.2` 安装组件 `0.1.7-rc.2`，DSH `0.1.5-rc.2` 安装组件 `0.1.5-rc.2`；已安装的 `0.1.5-rc.3` 组件仅在同版本宿主上识别。请不要省略组件版本号或自行改用 `@next`。
 
 <details>
 <summary>旧版宿主手动安装与离线准备</summary>
 
-插件安装页面填写与当前 DSH 相同版本的组件，例如 DSH `0.1.7-rc.1` 填写 `@deepseek-ai/dsh-subagent-codex@0.1.7-rc.1`。终端方式：
+插件安装页面填写与当前 DSH 相同版本的组件，例如 DSH `0.1.7-rc.2` 填写 `@deepseek-ai/dsh-subagent-codex@0.1.7-rc.2`。终端方式：
 
 ```sh
-dsh plugin --profile web add @deepseek-ai/dsh-subagent-codex@0.1.7-rc.1
+dsh plugin --profile web add @deepseek-ai/dsh-subagent-codex@0.1.7-rc.2
 ```
 
 安装到订阅插件所在的同一个 profile，完成后重启。离线使用须提前在目标系统与架构上安装并验证完整运行时；只复制订阅插件或 Codex 启动脚本不够。模型请求仍需联网。
