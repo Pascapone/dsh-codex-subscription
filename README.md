@@ -125,9 +125,11 @@ dsh --profile headless "只回复：ok"
 
 GPT-6 Sol 和 GPT-6 Luna 已在 [OpenAI 的 Codex 模型说明](https://learn.chatgpt.com/docs/models)中列出。插件会从当前账号的 Codex 模型目录自动读取可用模型及推理档位；对于 pi-ai 内置目录尚未包含 GPT-6 的宿主，还会提供 Sol 和 Luna 的离线回退项。账号目录刷新成功后仍以服务端目录为准。Sol 适合复杂编程，Luna 适合高频、目标明确的任务。离线回退采用 272000 Token 标准窗口、872000 Token 扩展上限并支持高速模式；显示回退项不代表服务端已向账号开放该模型。
 
-### 可选 Codex 模型基础提示词
+### 可选 DSH 模型指导
 
-在 **设置 → Codex 订阅 → 高级与诊断** 可开启，默认关闭。仅对 DSH 中选择的 Codex 订阅模型 GPT-6 Astra、Sol、Luna 生效：将对应模型的 `model_messages.instructions_template` **附加**到已有 DSH 系统提示词，保留 DSH 原有段落和运行上下文；切换模型后下一步使用新模型模板。优先读取当前账号的官方模型目录；若没有模板则使用 [Codex 仓库中的版本](https://github.com/openai/codex/blob/8e17909b27875b76b1e9a883a604ed24e969d609/codex-rs/models-manager/models.json)（Apache-2.0）。其他模型不附加模板。Codex CLI 还会根据配置、工具、批准策略与工作区加入其他指令，且 GPT-6 的 Responses-Lite 路径以独立 developer 消息传输模型基础指令；因此此选项不是对 CLI 整个请求的逐字节复制。独立 Codex 子任务由 Codex 自身管理。
+在 **设置 → Codex 订阅 → 高级与诊断 → DSH 模型指导** 可开启，默认关闭。为 GPT-6 Astra、Sol、Luna **附加**本地维护的 DSH 适配版提示词，保留现有系统提示词和运行上下文。保留 Codex 的清晰沟通、独立判断和持续完成已授权任务的理念，遵循 DSH 的身份、工具、权限、工作模式和文件链接规则。Astra 侧重复杂任务与技术解释；Sol 侧重有明确范围的实现和适度验证；Luna 侧重小型低风险修改，优先复用现有检查，复杂或关键实现需交由更合适的模型处理。所有模型仍须遵守必要验证要求。这是行为指导，不是权限隔离，也不会自动切换模型。
+
+这些是基于 [Codex 模板](https://github.com/openai/codex/blob/8e17909b27875b76b1e9a883a604ed24e969d609/codex-rs/models-manager/models.json)（Apache-2.0）审阅改写的版本，**不再读取远程目录中的提示词**；目录仍用于更新模型能力。仅精确匹配 `gpt-6-astra`、`gpt-6-sol`、`gpt-6-luna`，切换模型后下次组装生效，其他模型不附加。既有 `codexBasePrompt` 开关值保持不变，开启后使用新的 DSH 适配版。独立 Codex 子任务由 Codex 自身管理。强制使用完整提示词的 DSH preset 可能阻止附加段落。
 
 ### GPT-6 Astra 上下文
 

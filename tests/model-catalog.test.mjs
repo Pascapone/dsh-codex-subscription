@@ -6,6 +6,7 @@ import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { CODEX_MODELS_URL, createOfficialModelCatalog, parseOfficialModelCatalog } from '../src/model-catalog.js'
 import { openaiCodexProvider, openaiCodexSubscriptionProvider } from '../src/pi-ai-runtime.js'
 import { contextModelGroups } from '../src/settings-contract.js'
+import { DSH_MODEL_PROMPTS } from '../src/codex-base-prompts.js'
 
 const base = [{
   id: 'gpt-base', name: 'GPT Base', api: 'openai-codex-responses', provider: 'openai-codex',
@@ -80,20 +81,37 @@ test('official model catalog filters hidden entries and preserves advertised cap
   })
 })
 
-test('model-specific base instructions prefer the official catalog and fall back to bundled GPT-6 templates', async () => {
+test('reviewed DSH prompts cannot be replaced by catalog refresh, failure or account changes', async () => {
+  let fail = false
   const catalog = createOfficialModelCatalog({
     baseModels: () => base,
     getAuth: async () => ({ auth: { apiKey: 'test-token' } }),
     readCredential: async () => ({ type: 'oauth', accountId: 'test-account' }),
-    fetch: async () => Response.json({ models: [remote({ slug: 'gpt-6-sol', model_messages: { instructions_template: 'New official Sol instructions' } })] }),
+    fetch: async () => {
+      if (fail) throw new Error('offline')
+      return Response.json({ models: [...Object.keys(DSH_MODEL_PROMPTS), 'gpt-next'].map(slug => remote({
+        slug, context_window: 500_000,
+        model_messages: { instructions_template: 'Unreviewed remote instructions', persistent_instructions: 'Remote persistent mode' },
+        base_instructions: 'Legacy remote instructions',
+      })) })
+    },
   })
-  assert.match(catalog.basePrompt('gpt-6-astra'), /You are Codex/u)
-  assert.notEqual(catalog.basePrompt('gpt-6-sol'), catalog.basePrompt('gpt-6-luna'))
-  assert.equal(catalog.basePrompt('other-model'), undefined)
+  const checkPrompts = () => {
+    for (const [id, prompt] of Object.entries(DSH_MODEL_PROMPTS)) assert.equal(catalog.basePrompt(id), prompt)
+    for (const id of ['gpt-next', 'gpt-6-luna-preview', 'gpt-5.6-sol', 'other-model', '__proto__', 'constructor', undefined]) {
+      assert.equal(catalog.basePrompt(id), undefined)
+    }
+  }
+  checkPrompts()
   await catalog.refresh()
-  assert.equal(catalog.basePrompt('gpt-6-sol'), 'New official Sol instructions')
+  checkPrompts()
+  assert.equal(catalog.getModels([])[0].contextWindow, 500_000, 'capability updates still work')
+  for (const id of Object.keys(DSH_MODEL_PROMPTS)) assert.equal(catalog.metadata(id).instructionsTemplate, undefined)
+  fail = true
+  await assert.rejects(catalog.refresh(), /offline/u)
+  checkPrompts()
   catalog.clear()
-  assert.match(catalog.basePrompt('gpt-6-sol'), /You are Codex/u)
+  checkPrompts()
 })
 
 test('ChatGPT catalog keeps picker-visible subscription models that are not API-key models', () => {

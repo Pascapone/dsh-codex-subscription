@@ -1,5 +1,5 @@
 import { PACKAGE_VERSION, USER_AGENT } from './version.js'
-import { CODEX_BASE_PROMPTS } from './codex-base-prompts.js'
+import { DSH_MODEL_PROMPTS } from './codex-base-prompts.js'
 
 export const CODEX_MODELS_URL = `https://chatgpt.com/backend-api/codex/models?client_version=${encodeURIComponent(PACKAGE_VERSION)}`
 
@@ -97,11 +97,7 @@ function visibleModel(value) {
     thinkingLevelMap: reasoningMap(supported),
     supportVerbosity: value.support_verbosity === true,
     defaultVerbosity: ['low', 'medium', 'high'].includes(value.default_verbosity) ? value.default_verbosity : undefined,
-    ...(Object.hasOwn(CODEX_BASE_PROMPTS, id)
-      && typeof value.model_messages?.instructions_template === 'string'
-      && value.model_messages.instructions_template.length > 0
-      && value.model_messages.instructions_template.length <= 100_000
-      ? { instructionsTemplate: value.model_messages.instructions_template } : {}),
+
     supportsFast: [...(Array.isArray(value.additional_speed_tiers) ? value.additional_speed_tiers : []),
       ...(Array.isArray(value.service_tiers) ? value.service_tiers.map(tier => tier?.id) : [])]
       .some(tier => tier === 'fast' || tier === 'priority'),
@@ -246,7 +242,8 @@ export function createOfficialModelCatalog(options = {}) {
     // refreshed. A successful official catalog remains authoritative.
     getModels: fallback => models ?? addBundledCodexFallbacks(fallback),
     metadata: modelId => metadata.get(modelId),
-    basePrompt: modelId => metadata.get(modelId)?.instructionsTemplate || (Object.hasOwn(CODEX_BASE_PROMPTS, modelId) ? CODEX_BASE_PROMPTS[modelId] : undefined),
+    // Remote model capabilities may change; reviewed DSH instructions must not.
+    basePrompt: modelId => Object.hasOwn(DSH_MODEL_PROMPTS, modelId) ? DSH_MODEL_PROMPTS[modelId] : undefined,
     revision: () => revision,
     capabilityGaps: () => [...metadata.values()]
       .filter(model => model.unsupported && /^[a-z][a-z0-9._-]{0,79}$/u.test(model.id))

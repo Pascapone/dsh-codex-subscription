@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { RPC_ENDPOINTS } from '../src/rpc-contract.js'
 import { IMAGE_FEATURE_DEFAULTS } from '../src/image-features.js'
+import { DSH_MODEL_PROMPTS } from '../src/codex-base-prompts.js'
 import test from 'node:test'
 import Schema from '@deepseek-ai/schemastery'
 
@@ -403,13 +404,18 @@ test('Codex base prompt opt-in appends only the selected model and preserves DSH
   assert.equal(await assemble(original), original, 'off by default')
   assert.equal((await rpc({ codexBasePrompt: true })).value.codexBasePrompt, true)
   for (const model of ['gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna']) {
-    const result = await assemble({ ...original, variables: { provider: 'openai-codex', model } })
+    const selected = { ...original, variables: { provider: 'openai-codex', model } }
+    // The inner selection middleware may resolve a route different from the initial assembly.
+    const result = await listener(original, {}, async () => selected)
+    assert.equal(result.sections.length, 2)
     assert.equal(result.sections[0], original.sections[0])
     assert.equal(result.sections[1].name, 'codex-subscription/base-prompt')
-    assert.match(result.sections[1].text, /^You are Codex, an agent based on GPT-6/u)
+    assert.equal(result.sections[1].text, DSH_MODEL_PROMPTS[model])
     assert.equal(result.sections[1].interpolate, false)
     assert.equal(result.contexts, original.contexts)
     assert.equal(result.tools, original.tools)
+    assert.equal(result.variables, selected.variables)
+    assert.equal(original.sections.length, 1, 'assembly input is not mutated')
   }
   assert.equal((await assemble({ ...original, variables: { provider: 'other', model: 'gpt-6-sol' } })).sections.length, 1)
   assert.equal((await assemble({ ...original, variables: { provider: 'openai-codex', model: 'unknown' } })).sections.length, 1)
