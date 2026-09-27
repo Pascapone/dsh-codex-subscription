@@ -95,7 +95,8 @@ test('custom context rows follow the active upstream model catalog', () => {
   ])
 })
 
-function fakeContext({ connection = true, webServer = true } = {}) {
+function fakeContext({ connection = true, webServer = true, prompt = false } = {}) {
+  const promptHooks = []
   const registered = []
   const handled = []
   const searchProviders = []
@@ -118,6 +119,8 @@ function fakeContext({ connection = true, webServer = true } = {}) {
   }
   const searchProviderMap = new Map([['deepseek-official', { id: 'deepseek-official', available: () => true, async search() { return { sources: [], truncated: false } } }]])
   const ctx = {
+    systemPrompt: prompt ? {} : undefined,
+    on(event, listener, options) { if (event === 'system-prompt/assemble') promptHooks.push({ listener, options }); return () => {} },
     credentials: {
       async resolve() { return credential === undefined ? undefined : { value: credential } },
       async set(_ref, value) { credential = value },
@@ -189,7 +192,7 @@ function fakeContext({ connection = true, webServer = true } = {}) {
     effect(register) { return register() },
   }
   return {
-    ctx, registered, handled, provided, searchProviders, settings, tools, webUpdates,
+    ctx, registered, handled, provided, searchProviders, settings, tools, webUpdates, promptHooks,
     async request(endpoint, payload, signal) {
       const method = 'codex-subscription/' + endpoint
       const route = handled.find(route => route.path === '/api/' + method)
@@ -362,7 +365,7 @@ test('plugin registers one Codex route, subscription image tool, and DSH-trusted
   assert.equal(typeof preferenceStatus.value.subagentRuntimeInstalled, 'boolean')
   assert.deepEqual(preferenceStatus, {
     ok: true,
-    value: { compactionMode: 'dsh', connectionMode: 'sse', subagentBackend: 'dsh', subagentBackendAvailable: false, subagentRuntimeInstalled: preferenceStatus.value.subagentRuntimeInstalled, transcriptionEnabled: false, ...IMAGE_FEATURE_DEFAULTS, imageModel: 'gpt-image-2', imageQuality: 'auto', quickQuotaMode: QUICK_QUOTA_MODE_PERCENT, searchProvider: 'codex', speedMode: SPEED_MODE_STANDARD, sessionSpeedModes: {}, outputVerbosity: OUTPUT_VERBOSITY_DEFAULT, contextMode: CONTEXT_MODE_STANDARD, customContextWindow: 272_000, customContextGpt54: 272_000, customContextGpt54Mini: 272_000, customContextGpt55: 272_000, customContextGpt56: 272_000, customContextGpt6Astra: 272_000, contextModels: activeContextModels, verbosityModels, fastModels: preferenceStatus.value.fastModels, catalogStatus: preferenceStatus.value.catalogStatus, customContextModels: {}, searchMode: 'live', searchDomains: [], quotaAlerts: 'important', quotaShortThreshold: 20, quotaLongThreshold: 20, writable: true },
+    value: { compactionMode: 'dsh', connectionMode: 'sse', subagentBackend: 'dsh', subagentBackendAvailable: false, subagentRuntimeInstalled: preferenceStatus.value.subagentRuntimeInstalled, transcriptionEnabled: false, codexBasePrompt: false, ...IMAGE_FEATURE_DEFAULTS, imageModel: 'gpt-image-2', imageQuality: 'auto', quickQuotaMode: QUICK_QUOTA_MODE_PERCENT, searchProvider: 'codex', speedMode: SPEED_MODE_STANDARD, sessionSpeedModes: {}, outputVerbosity: OUTPUT_VERBOSITY_DEFAULT, contextMode: CONTEXT_MODE_STANDARD, customContextWindow: 272_000, customContextGpt54: 272_000, customContextGpt54Mini: 272_000, customContextGpt55: 272_000, customContextGpt56: 272_000, customContextGpt6Astra: 272_000, contextModels: activeContextModels, verbosityModels, fastModels: preferenceStatus.value.fastModels, catalogStatus: preferenceStatus.value.catalogStatus, customContextModels: {}, searchMode: 'live', searchDomains: [], quotaAlerts: 'important', quotaShortThreshold: 20, quotaLongThreshold: 20, writable: true },
   })
   const preferenceUpdate = await host.request('preferences/update', {
     quickQuotaMode: QUICK_QUOTA_MODE_BAR,
@@ -374,7 +377,7 @@ test('plugin registers one Codex route, subscription image tool, and DSH-trusted
   }, signal)
   assert.deepEqual(preferenceUpdate, {
     ok: true,
-    value: { compactionMode: 'dsh', connectionMode: 'sse', subagentBackend: 'dsh', subagentBackendAvailable: false, subagentRuntimeInstalled: preferenceStatus.value.subagentRuntimeInstalled, transcriptionEnabled: false, ...IMAGE_FEATURE_DEFAULTS, imageModel: 'gpt-image-2', imageQuality: 'auto', quickQuotaMode: QUICK_QUOTA_MODE_BAR, searchProvider: 'dsh', speedMode: SPEED_MODE_FAST, sessionSpeedModes: {}, outputVerbosity: OUTPUT_VERBOSITY_DEFAULT, contextMode: CONTEXT_MODE_EXTENDED, customContextWindow: 500_000, customContextGpt54: 272_000, customContextGpt54Mini: 400_000, customContextGpt55: 272_000, customContextGpt56: 272_000, customContextGpt6Astra: 272_000, contextModels: activeContextModels, verbosityModels, fastModels: preferenceStatus.value.fastModels, catalogStatus: preferenceStatus.value.catalogStatus, customContextModels: {}, searchMode: 'live', searchDomains: [], quotaAlerts: 'important', quotaShortThreshold: 20, quotaLongThreshold: 20, writable: true },
+    value: { compactionMode: 'dsh', connectionMode: 'sse', subagentBackend: 'dsh', subagentBackendAvailable: false, subagentRuntimeInstalled: preferenceStatus.value.subagentRuntimeInstalled, transcriptionEnabled: false, codexBasePrompt: false, ...IMAGE_FEATURE_DEFAULTS, imageModel: 'gpt-image-2', imageQuality: 'auto', quickQuotaMode: QUICK_QUOTA_MODE_BAR, searchProvider: 'dsh', speedMode: SPEED_MODE_FAST, sessionSpeedModes: {}, outputVerbosity: OUTPUT_VERBOSITY_DEFAULT, contextMode: CONTEXT_MODE_EXTENDED, customContextWindow: 500_000, customContextGpt54: 272_000, customContextGpt54Mini: 400_000, customContextGpt55: 272_000, customContextGpt56: 272_000, customContextGpt6Astra: 272_000, contextModels: activeContextModels, verbosityModels, fastModels: preferenceStatus.value.fastModels, catalogStatus: preferenceStatus.value.catalogStatus, customContextModels: {}, searchMode: 'live', searchDomains: [], quotaAlerts: 'important', quotaShortThreshold: 20, quotaLongThreshold: 20, writable: true },
   })
   assert.deepEqual(host.webUpdates.at(-1), {
     config: { searchProvider: 'deepseek-official', fetchProvider: 'local' },
@@ -387,6 +390,32 @@ test('plugin registers one Codex route, subscription image tool, and DSH-trusted
     ok: false,
     error: { code: 'internal', message: 'Invalid quick quota preference', details: { issues: [] } },
   })
+})
+
+test('Codex base prompt opt-in appends only the selected model and preserves DSH assembly', async () => {
+  const host = fakeContext({ prompt: true })
+  applyPlugin(host.ctx)
+  const rpc = (payload) => host.request('preferences/update', payload, new AbortController().signal)
+  const { listener, options } = host.promptHooks[0]
+  assert.equal(options.prepend, true)
+  const original = { sections: [{ name: 'dsh', text: 'DSH instructions' }], contexts: [{ name: 'runtime', text: 'context' }], tools: [{ name: 'pwsh' }], variables: { provider: 'openai-codex', model: 'gpt-6-sol' } }
+  const assemble = value => listener(undefined, {}, async () => value)
+  assert.equal(await assemble(original), original, 'off by default')
+  assert.equal((await rpc({ codexBasePrompt: true })).value.codexBasePrompt, true)
+  for (const model of ['gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna']) {
+    const result = await assemble({ ...original, variables: { provider: 'openai-codex', model } })
+    assert.equal(result.sections[0], original.sections[0])
+    assert.equal(result.sections[1].name, 'codex-subscription/base-prompt')
+    assert.match(result.sections[1].text, /^You are Codex, an agent based on GPT-6/u)
+    assert.equal(result.sections[1].interpolate, false)
+    assert.equal(result.contexts, original.contexts)
+    assert.equal(result.tools, original.tools)
+  }
+  assert.equal((await assemble({ ...original, variables: { provider: 'other', model: 'gpt-6-sol' } })).sections.length, 1)
+  assert.equal((await assemble({ ...original, variables: { provider: 'openai-codex', model: 'unknown' } })).sections.length, 1)
+  assert.equal((await rpc({ codexBasePrompt: 'yes' })).ok, false)
+  assert.equal((await rpc({ codexBasePrompt: false })).value.codexBasePrompt, false)
+  assert.equal(await assemble(original), original)
 })
 
 test('Astra custom context is persisted through settings RPC with its audited bounds', async () => {

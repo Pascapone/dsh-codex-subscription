@@ -5,6 +5,7 @@ This project depends on software distributed under its own terms. The dependency
 | Project | Role | License | Source |
 | --- | --- | --- | --- |
 | DeepSeek Harness packages | Plugin host, client slots, credential and LLM interfaces | MIT | https://github.com/deepseek-ai/deepseek-harness |
+| OpenAI Codex model instructions (8e17909) | Bundled GPT-6 Astra, Sol, Luna base-prompt snapshots from `codex-rs/models-manager/models.json` | Apache-2.0, Copyright 2025 OpenAI; see LICENSE-CODEX-APACHE-2.0 | https://github.com/openai/codex/blob/8e17909b27875b76b1e9a883a604ed24e969d609/codex-rs/models-manager/models.json |
 | `@openai/codex` 0.153.4 | Optional official DSH Codex subagent runtime, installed as a dependency | Apache-2.0 | https://github.com/openai/codex |
 | `@earendil-works/pi-ai` 0.82.1 | OpenAI Codex OAuth, model catalog, Responses transport, and WebSocket continuation | MIT | https://github.com/earendil-works/pi |
 | React | DSH settings component runtime | MIT | https://github.com/facebook/react |

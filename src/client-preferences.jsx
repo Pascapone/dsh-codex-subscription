@@ -99,6 +99,13 @@ export function PreferencesCard({ preference, rpc, t, section = "display" }) {
         <SearchProviderPreference preference={preference} t={t} />
         <div className="codexSubscriptionDivider" />
         <ContextWindowPreference preference={preference} t={t} />
+        <div className="codexSubscriptionDivider" />
+        <div className="codexSubscriptionPreference">
+          <div className="codexSubscriptionPreferenceCopy"><span className="codexSubscriptionPreferenceLabel">{t('codexBasePromptTitle')}</span><span className="codexSubscriptionPreferenceHint">{t('codexBasePromptHint')}</span></div>
+          <div className="codexSubscriptionQuotaModes" role="radiogroup" aria-label={t('codexBasePromptTitle')} aria-busy={snapshot.saving || undefined}>
+            {[false, true].map(value => <label key={String(value)} className="codexSubscriptionQuotaMode"><input type="radio" name="codex-base-prompt" checked={snapshot.codexBasePrompt === value} disabled={!snapshot.writable} onChange={() => { void preference.set({ codexBasePrompt: value }) }} /><span>{t(value ? 'compaction_cloud' : 'compaction_dsh')}</span></label>)}
+          </div>
+        </div>
       </section>
       <section className="codexSubscriptionCard codexSubscriptionPreferencesCard" aria-label={t('transcriptionTitle')}>
         <div className="codexSubscriptionPreference">

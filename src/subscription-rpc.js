@@ -98,6 +98,10 @@ export function createSubscriptionRpcHandler({ authHandler, usageReader, resetCr
             return { ok: true, value: preferences.status() }
           }
           const patch = capabilityPatch(payload)
+          if (Object.hasOwn(payload ?? {}, 'codexBasePrompt')) {
+            if (typeof payload.codexBasePrompt !== 'boolean') return publicError('invalid-input', 'Invalid Codex base prompt preference')
+            patch.codexBasePrompt = payload.codexBasePrompt
+          }
           for (const [field, rule] of Object.entries(PREFERENCE_FIELDS)) {
             if (!Object.hasOwn(payload ?? {}, field)) continue
             if (!rule.choices.includes(payload[field])) return publicError('internal', rule.error)

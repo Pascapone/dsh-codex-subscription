@@ -62,6 +62,7 @@ export function createPreferenceController(scope, rpc) {
       ...capabilities,
       connectionMode: value?.connectionMode === 'websocket' ? 'websocket' : 'sse',
       compactionMode: value?.compactionMode === 'cloud' ? 'cloud' : 'dsh',
+      codexBasePrompt: value?.codexBasePrompt === true,
       subagentBackend: value?.subagentBackend === 'codex' ? 'codex' : 'dsh',
       subagentBackendAvailable,
       subagentRuntimeInstalled,
@@ -119,6 +120,7 @@ export function createPreferenceController(scope, rpc) {
       value: {
         connectionMode: value?.connectionMode === 'websocket' ? 'websocket' : 'sse',
         compactionMode: value?.compactionMode === 'cloud' ? 'cloud' : 'dsh',
+      codexBasePrompt: value?.codexBasePrompt === true,
         subagentBackend: value?.subagentBackend === 'codex' ? 'codex' : 'dsh',
         ...readCapabilitySettings(value),
         [QUICK_QUOTA_MODE_FIELD]: normalizeQuickQuotaMode(

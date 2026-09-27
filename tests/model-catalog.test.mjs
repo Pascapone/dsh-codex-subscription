@@ -80,6 +80,22 @@ test('official model catalog filters hidden entries and preserves advertised cap
   })
 })
 
+test('model-specific base instructions prefer the official catalog and fall back to bundled GPT-6 templates', async () => {
+  const catalog = createOfficialModelCatalog({
+    baseModels: () => base,
+    getAuth: async () => ({ auth: { apiKey: 'test-token' } }),
+    readCredential: async () => ({ type: 'oauth', accountId: 'test-account' }),
+    fetch: async () => Response.json({ models: [remote({ slug: 'gpt-6-sol', model_messages: { instructions_template: 'New official Sol instructions' } })] }),
+  })
+  assert.match(catalog.basePrompt('gpt-6-astra'), /You are Codex/u)
+  assert.notEqual(catalog.basePrompt('gpt-6-sol'), catalog.basePrompt('gpt-6-luna'))
+  assert.equal(catalog.basePrompt('other-model'), undefined)
+  await catalog.refresh()
+  assert.equal(catalog.basePrompt('gpt-6-sol'), 'New official Sol instructions')
+  catalog.clear()
+  assert.match(catalog.basePrompt('gpt-6-sol'), /You are Codex/u)
+})
+
 test('ChatGPT catalog keeps picker-visible subscription models that are not API-key models', () => {
   const models = parseOfficialModelCatalog({ models: [remote({
     slug: 'gpt-5.3-codex-spark',

@@ -100,6 +100,7 @@ const settingsFields = {
   ...Object.fromEntries(QUOTA_THRESHOLD_FIELDS.map(key => [key, z.number().step(1).min(1).max(100).default(20)])),
   [QUOTA_ALERTS_FIELD]: z.union(QUOTA_ALERT_MODES).default('important'),
   transcriptionEnabled: z.boolean().default(false),
+  codexBasePrompt: z.boolean().default(false),
   [LEGACY_QUICK_QUOTA_FIELD]: z.boolean(),
   [CUSTOM_CONTEXT_WINDOW_FIELD]: z.number().step(1).min(128_000).max(1_000_000).default(DEFAULT_CUSTOM_CONTEXT_WINDOW),
   ...Object.fromEntries(Object.entries(CUSTOM_CONTEXT_MODEL_FIELDS).map(([modelKey, field]) => [field, z.number().step(1).min(128_000).max(CUSTOM_CONTEXT_MODEL_CAPS[modelKey]).default(CUSTOM_CONTEXT_MODEL_DEFAULTS[modelKey])])),
@@ -140,6 +141,12 @@ export function apply(ctx, config = {}) {
     baseModels: () => baseProvider.getModels(),
     fetch: (input, init) => network.fetch('catalog', input, init),
   })
+  ctx.inject(['systemPrompt'], scoped => scoped.effect(() => scoped.on('system-prompt/assemble', async (_input, _context, next) => {
+    const assembled = await next()
+    const prompt = settings.get().codexBasePrompt === true && assembled.variables.provider === PROVIDER
+      ? modelCatalog.basePrompt(assembled.variables.model) : undefined
+    return prompt ? { ...assembled, sections: [...assembled.sections, { name: 'codex-subscription/base-prompt', text: prompt, interpolate: false }] } : assembled
+  }, { prepend: true }), 'codex-subscription: optional model base prompt'))
   const connection = createSubscriptionConnection({ resolveMode: () => settings.get().connectionMode })
   const compaction = createCompactionBridge({
     enabled: () => settings.get().compactionMode === 'cloud',
@@ -178,6 +185,7 @@ export function apply(ctx, config = {}) {
         settings.get()[QUICK_QUOTA_MODE_FIELD],
         settings.get()[LEGACY_QUICK_QUOTA_FIELD],
       ),
+      codexBasePrompt: settings.get().codexBasePrompt === true,
       [SEARCH_PROVIDER_FIELD]: settings.get()[SEARCH_PROVIDER_FIELD],
       [SPEED_MODE_FIELD]: settings.get()[SPEED_MODE_FIELD],
       [SESSION_SPEED_MODES_FIELD]: settings.get()[SESSION_SPEED_MODES_FIELD] ?? {},
