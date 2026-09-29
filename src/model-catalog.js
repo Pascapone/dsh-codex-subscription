@@ -36,6 +36,21 @@ const BUNDLED_FALLBACK_MODELS = Object.freeze([
     supportsFast: true,
     templateId: 'gpt-5.6-sol',
   }),
+  Object.freeze({
+    id: 'gpt-6.1-sol',
+    name: 'GPT-6.1-Sol',
+    description: 'Latest workhorse model for coding and everyday work.',
+    priority: 1,
+    input: ['text', 'image'],
+    contextWindow: 272_000,
+    maxContextWindow: 872_000,
+    reasoning: true,
+    thinkingLevelMap: { off: null, minimal: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
+    supportVerbosity: true,
+    defaultVerbosity: 'low',
+    supportsFast: true,
+    templateId: 'gpt-5.6-sol',
+  }),
 ])
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 const nonEmpty = value => typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined

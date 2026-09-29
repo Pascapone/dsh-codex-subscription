@@ -403,7 +403,7 @@ test('Codex base prompt opt-in appends only the selected model and preserves DSH
   const assemble = value => listener(undefined, {}, async () => value)
   assert.equal(await assemble(original), original, 'off by default')
   assert.equal((await rpc({ codexBasePrompt: true })).value.codexBasePrompt, true)
-  for (const model of ['gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna']) {
+  for (const model of ['gpt-6-astra', 'gpt-6-sol', 'gpt-6.1-sol', 'gpt-6-luna']) {
     const selected = { ...original, variables: { provider: 'openai-codex', model } }
     // The inner selection middleware may resolve a route different from the initial assembly.
     const result = await listener(original, {}, async () => selected)

@@ -5,7 +5,7 @@ import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 
 import { CODEX_MODELS_URL, createOfficialModelCatalog, parseOfficialModelCatalog } from '../src/model-catalog.js'
 import { openaiCodexProvider, openaiCodexSubscriptionProvider } from '../src/pi-ai-runtime.js'
-import { contextModelGroups } from '../src/settings-contract.js'
+import { contextModelGroups, supportsCodexFastMode } from '../src/settings-contract.js'
 import { DSH_MODEL_PROMPTS } from '../src/codex-base-prompts.js'
 
 const base = [{
@@ -18,8 +18,11 @@ test('offline catalog adds GPT-6 fallbacks without resurrecting retired Spark', 
   const catalog = createOfficialModelCatalog()
   const fallback = openaiCodexProvider().getModels()
   const models = catalog.getModels(fallback)
-  assert.deepEqual(models.slice(0, 2).map(model => model.id), ['gpt-6-luna', 'gpt-6-sol'])
+  assert.deepEqual(models.slice(0, 3).map(model => model.id), ['gpt-6-luna', 'gpt-6-sol', 'gpt-6.1-sol'])
   assert.equal(models.some(model => model.id === 'gpt-5.3-codex-spark'), false)
+  assert.equal(models[2].contextWindow, 272_000)
+  assert.equal(models[2].maxContextWindow, 872_000)
+  assert.equal(supportsCodexFastMode('gpt-6.1-sol'), true)
   assert.equal(models.some(model => model.id === 'gpt-5.5'), true)
   assert.deepEqual(models[0].thinkingLevelMap, {
     off: null, minimal: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max',
@@ -198,6 +201,10 @@ test('new Codex models appear from the account catalog with supported reasoning 
           context_window: 272_000, max_context_window: 872_000,
           supported_reasoning_levels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'].map(effort => ({ effort })),
         }),
+        remote({ slug: 'gpt-6.1-sol', display_name: 'GPT-6.1-Sol', priority: 1,
+          context_window: 272_000, max_context_window: 872_000,
+          supported_reasoning_levels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'].map(effort => ({ effort })),
+        }),
         remote({ slug: 'gpt-6-luna', display_name: 'GPT-6-Luna', priority: 3,
           context_window: 272_000, max_context_window: 872_000,
           supported_reasoning_levels: ['low', 'medium', 'high', 'xhigh', 'max'].map(effort => ({ effort })),
@@ -206,12 +213,16 @@ test('new Codex models appear from the account catalog with supported reasoning 
     },
   })
   await catalog.refresh()
-  const provider = openaiCodexSubscriptionProvider({ catalog, resolveContextMode: () => 'extended' })
+  let contextMode = 'standard'
+  const provider = openaiCodexSubscriptionProvider({ catalog, resolveContextMode: () => contextMode })
+  assert.equal(provider.getModels().find(model => model.id === 'gpt-6.1-sol').contextWindow, 272_000)
+  contextMode = 'extended'
   assert.deepEqual(provider.getModels().map(model => [model.id, model.contextWindow]), [
-    ['gpt-6-luna', 872_000], ['gpt-6-sol', 872_000],
+    ['gpt-6-luna', 872_000], ['gpt-6-sol', 872_000], ['gpt-6.1-sol', 872_000],
   ])
-  assert.deepEqual(contextModelGroups(catalog.getModels([])).map(row => row.key), ['gpt-6-luna', 'gpt-6-sol'])
+  assert.deepEqual(contextModelGroups(catalog.getModels([])).map(row => row.key), ['gpt-6-luna', 'gpt-6-sol', 'gpt-6.1-sol'])
   assert.equal(catalog.metadata('gpt-6-luna').thinkingLevelMap.max, 'max')
+  assert.equal(catalog.metadata('gpt-6.1-sol').supportsFast, true)
   assert.equal(catalog.metadata('gpt-6-sol').thinkingLevelMap.ultra, undefined)
   assert.equal(catalog.metadata('gpt-6-sol').supportsFast, true)
 })
@@ -261,7 +272,7 @@ test('catalog timeout rejects even when an injected request ignores abort and dr
   resolveFetch(Response.json({ models: [remote({ slug: 'late-model' })] }))
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(catalog.revision(), 0)
-  assert.deepEqual(catalog.getModels(base).map(model => model.id), ['gpt-6-luna', 'gpt-6-sol', 'gpt-base'])
+  assert.deepEqual(catalog.getModels(base).map(model => model.id), ['gpt-6-luna', 'gpt-6-sol', 'gpt-6.1-sol', 'gpt-base'])
 })
 
 test('clear aborts the old flight without letting its timer invalidate the replacement', async () => {

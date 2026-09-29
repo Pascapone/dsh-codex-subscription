@@ -138,5 +138,5 @@ export const normalizeQuickQuotaMode = (value, legacyVisible = false) => (
 )
 
 export const supportsCodexFastMode = modelId => typeof modelId === 'string' && (
-  /^gpt-5\.(?:5|6)(?:$|-)/u.test(modelId) || modelId === 'gpt-5.4' || /^gpt-6-(?:astra|sol|luna)$/u.test(modelId)
+  /^gpt-5\.(?:5|6)(?:$|-)/u.test(modelId) || modelId === 'gpt-5.4' || /^gpt-6-(?:astra|sol|luna)$/u.test(modelId) || modelId === 'gpt-6.1-sol'
 )

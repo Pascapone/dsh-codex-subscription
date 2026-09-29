@@ -4,7 +4,8 @@ import { DSH_MODEL_PROMPTS } from '../src/codex-base-prompts.js'
 
 // Guard against accidentally restoring raw upstream templates; this is not an LLM behavior eval.
 test('DSH adaptations retain host boundaries, useful autonomy and distinct model scopes', () => {
-  assert.deepEqual(Object.keys(DSH_MODEL_PROMPTS), ['gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna'])
+  assert.deepEqual(Object.keys(DSH_MODEL_PROMPTS), ['gpt-6-astra', 'gpt-6-sol', 'gpt-6.1-sol', 'gpt-6-luna'])
+  assert.equal(DSH_MODEL_PROMPTS['gpt-6.1-sol'], DSH_MODEL_PROMPTS['gpt-6-sol'])
   assert.equal(new Set(Object.values(DSH_MODEL_PROMPTS)).size, 3)
   for (const [id, text] of Object.entries(DSH_MODEL_PROMPTS)) {
     assert.match(text, /^# Additional DSH model guidance/u)

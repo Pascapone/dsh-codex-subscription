@@ -98,5 +98,6 @@ Minimize newly written tests. Prefer existing focused checks and directly observ
 export const DSH_MODEL_PROMPTS = Object.freeze({
   'gpt-6-astra': `${DSH_CONTEXT}\n\n${ASTRA}\n\n${WORKFLOW}`,
   'gpt-6-sol': `${DSH_CONTEXT}\n\n${SOL}\n\n${WORKFLOW}`,
+  'gpt-6.1-sol': `${DSH_CONTEXT}\n\n${SOL}\n\n${WORKFLOW}`,
   'gpt-6-luna': `${DSH_CONTEXT}\n\n${LUNA}\n\n${WORKFLOW}`,
 })
