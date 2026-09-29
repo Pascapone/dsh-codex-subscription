@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
+import { WebSocketServer } from 'ws'
 import { createSubscriptionConnection } from '../src/subscription-connection.js'
 import { openaiCodexSubscriptionProvider } from '../src/pi-ai-runtime.js'
 import { createCodexNetworkTransport, withCodexNetwork } from '../src/oauth-network.js'
@@ -38,9 +39,74 @@ test('experimental connections keep default SSE and isolate session caches acros
     const second = createSubscriptionConnection({ resolveMode: () => mode, resolveProxy: async () => undefined })
     assert.notEqual(first.options.sessionId, (await second.prepare(input)).options.sessionId)
     second.dispose()
+    const local = 'http://127.0.0.1:18781/backend-api'
+    const routed = await policy.prepare(input, local)
+    assert.equal(routed.network.websocketProxy, undefined, 'local bearer must not traverse an external proxy')
+    assert.equal(routed.options.sessionId, (await policy.prepare(input, local)).options.sessionId)
+    assert.notEqual(routed.options.sessionId, (await policy.prepare(input, 'http://127.0.0.1:18782/backend-api')).options.sessionId)
+    assert.notEqual(routed.options.sessionId, first.options.sessionId)
     mode = 'sse'
     assert.equal((await policy.prepare(input)).options.sessionId, 'conversation')
   } finally { policy.dispose() }
+})
+
+test('a trusted request-local route preserves Codex OAuth and leaves the shared model and direct requests unchanged', async () => {
+  const originalFetch = globalThis.fetch, requests = []
+  const apiKey = `e30.${Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'account-1' } })).toString('base64url')}.fake`
+  globalThis.fetch = async (input, init) => {
+    requests.push({ url: String(input), headers: new Headers(init.headers) })
+    return new Response('data: {"type":"response.created","response":{"id":"fixture"}}\n\ndata: {"type":"response.done","response":{"id":"fixture","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":0,"total_tokens":1}}}\n\n', { headers: { 'content-type': 'text/event-stream' } })
+  }
+  let route = { ready: true, baseUrl: 'http://127.0.0.1:18781/backend-api' }
+  const selections = []
+  const provider = openaiCodexSubscriptionProvider({
+    connection: createSubscriptionConnection(),
+    resolveRoute: request => { selections.push(request); if (route === 'throw') throw Error('companion restarting'); return route },
+  })
+  const model = provider.getModels().find(value => value.id === 'gpt-5.6-luna')
+  const originalBaseUrl = model.baseUrl
+  const context = { messages: [{ role: 'user', content: 'test', timestamp: Date.now() }] }
+  const send = async method => { for await (const _event of provider[method](model, context, { apiKey, sessionId: 'same' })) {} }
+  try {
+    await send('stream'); await send('streamSimple')
+    route = { ready: true, baseUrl: 'https://attacker.test/backend-api' }; await send('streamSimple')
+    route = 'throw'; await send('streamSimple')
+    assert.deepEqual(requests.map(request => request.url), [
+      'http://127.0.0.1:18781/backend-api/codex/responses',
+      'http://127.0.0.1:18781/backend-api/codex/responses',
+      'https://chatgpt.com/backend-api/codex/responses',
+      'https://chatgpt.com/backend-api/codex/responses',
+    ])
+    assert.deepEqual(selections[0], { provider: 'openai-codex', model: model.id, sessionId: 'same' })
+    assert.equal(model.baseUrl, originalBaseUrl)
+    for (const request of requests) {
+      assert.equal(request.headers.get('authorization'), `Bearer ${apiKey}`)
+      assert.equal(request.headers.get('chatgpt-account-id'), 'account-1')
+    }
+  } finally { globalThis.fetch = originalFetch }
+})
+
+test('the local Headroom WebSocket handshake forwards the Codex bearer and account headers', async () => {
+  const server = http.createServer(), sockets = new WebSocketServer({ server })
+  let handshake
+  sockets.on('connection', (socket, request) => { handshake = request; socket.close() })
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  const baseUrl = `http://127.0.0.1:${server.address().port}/backend-api`
+  try {
+    await withCodexNetwork(() => new Promise((resolve, reject) => {
+      const socket = new globalThis.WebSocket(`ws://127.0.0.1:${server.address().port}/backend-api/codex/responses`, {
+        headers: { Authorization: 'Bearer fixture-token', 'ChatGPT-Account-ID': 'fixture-account' },
+      })
+      socket.addEventListener('open', resolve, { once: true })
+      socket.addEventListener('error', reject, { once: true })
+    }), { websocket: true, headroomBaseUrl: baseUrl })
+    assert.equal(handshake.url, '/backend-api/codex/responses')
+    assert.equal(handshake.headers.authorization, 'Bearer fixture-token')
+    assert.equal(handshake.headers['chatgpt-account-id'], 'fixture-account')
+  } finally {
+    await new Promise(resolve => sockets.close(resolve))
+    await new Promise(resolve => server.close(resolve))
+  }
 })
 
 test('a rejected WebSocket proxy CONNECT falls back through the existing SSE route, without changing global proxy settings', async () => {

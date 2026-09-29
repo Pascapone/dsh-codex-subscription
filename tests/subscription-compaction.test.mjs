@@ -4,7 +4,7 @@ import {createCompactionBridge} from '../src/subscription-compaction.js'
 const user=text=>({id:text,role:'user',source:{kind:'user'},content:[{type:'text',text}]})
 const native={response:{kind:'pi-ai',version:2},blocks:[{type:'text'}]}
 const item={type:'compaction',encrypted_content:'SYNTHETIC_ONLY'}
-function fixture({enabled=true,complete=true,reason='stop',block={type:'text',text:'READY'},contextWindow}={}){
+function fixture({enabled=true,complete=true,reason='stop',block={type:'text',text:'READY'},contextWindow,headroomBaseUrl}={}){
  const wires=[];let bridge
  const adapter={async *stream(options){
   const payload=bridge.preparePayload({input:options.messages.map(m=>({role:m.role,content:m.content})),model:options.model},contextWindow);wires.push(payload)
@@ -12,7 +12,7 @@ function fixture({enabled=true,complete=true,reason='stop',block={type:'text',te
   const events=[{type:'response.output_item.done',item},...toolItems,{type:'response.completed',response:{status:complete?'completed':'incomplete'}}]
   const bytes=new TextEncoder().encode(events.map(e=>'data: '+JSON.stringify(e)+'\n\n').join(''))
   const raw=new Response(new ReadableStream({start(c){for(let i=0;i<bytes.length;i+=7)c.enqueue(bytes.slice(i,i+7));c.close()}}))
-  const response=bridge.networkOptions({})?.transformResponse?.(raw,new URL('https://chatgpt.com/backend-api/codex/responses'))??raw
+  const response=bridge.networkOptions({headroomBaseUrl})?.transformResponse?.(raw,new URL(`${headroomBaseUrl??'https://chatgpt.com/backend-api'}/codex/responses`))??raw
   assert.equal(await response.text(),new TextDecoder().decode(bytes))
   yield {type:'block-end',index:0,block}
   yield {type:'finish',reason:{kind:reason},replayState:native}
@@ -26,6 +26,11 @@ test('checkpoint captured without content-type and restored after JSON roundtrip
  const f=fixture();const first=await run(f.adapter,[user('history')]);assert.ok(first.replayState.response.codexCompactionV1)
  await run(f.adapter,[user('history'),message(first),user('next')]);assert.equal(f.wires[1].input[0].type,'compaction');assert.equal(f.wires[1].input.length,2)
  assert.deepEqual(first.replayState.blocks,native.blocks)
+})
+test('cloud compaction captures its SSE checkpoint through the trusted Headroom endpoint',async()=>{
+ const f=fixture({headroomBaseUrl:'http://127.0.0.1:18781/backend-api'})
+ const first=await run(f.adapter,[user('history')])
+ assert.ok(first.replayState.response.codexCompactionV1)
 })
 test('disabled and unsuccessful requests never adopt state',async()=>{
  for(const args of [{enabled:false},{complete:false},{reason:'aborted'},{reason:'error'}]){const f=fixture(args);assert.equal((await run(f.adapter,[user('history')])).replayState.response.codexCompactionV1,undefined)}

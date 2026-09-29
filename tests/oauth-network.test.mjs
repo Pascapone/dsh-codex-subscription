@@ -137,6 +137,22 @@ test('Codex network adapts only official auth and subscription hosts to an exist
   }
 })
 
+test('the response observer sees only the selected local Headroom route', async () => {
+  const original = globalThis.fetch, observed = []
+  globalThis.fetch = async input => new Response(`direct:${input}`)
+  try {
+    const result = await withCodexNetwork(async () => Promise.all([
+      fetch('http://127.0.0.1:18781/backend-api/codex/responses').then(response => response.text()),
+      fetch('http://127.0.0.1:18782/backend-api/codex/responses').then(response => response.text()),
+    ]), {
+      headroomBaseUrl: 'http://127.0.0.1:18781/backend-api',
+      transformResponse: (response, target) => { observed.push(target.href); return new Response('observed') },
+    })
+    assert.deepEqual(result, ['observed', 'direct:http://127.0.0.1:18782/backend-api/codex/responses'])
+    assert.deepEqual(observed, ['http://127.0.0.1:18781/backend-api/codex/responses'])
+  } finally { globalThis.fetch = original }
+})
+
 test('network diagnostics keep actionable request failures without proxy addresses', async () => {
   const transport = createCodexNetworkTransport({
     env: { HTTPS_PROXY: 'http://user:secret@127.0.0.1:7890' },

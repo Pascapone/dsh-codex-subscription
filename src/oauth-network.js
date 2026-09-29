@@ -12,6 +12,19 @@ const CODEX_AUTH_HOST = 'auth.openai.com'
 const CODEX_SUBSCRIPTION_HOST = 'chatgpt.com'
 const CODEX_HOSTS = new Set([CODEX_AUTH_HOST, CODEX_SUBSCRIPTION_HOST])
 
+// A subscription bearer may only be routed to the companion's local Codex proxy.
+export function headroomRouteUrl(value) {
+  const match = typeof value === 'string' && /^http:\/\/127\.0\.0\.1:([1-9]\d{0,4})\/backend-api$/u.exec(value)
+  return match && Number(match[1]) <= 65535 ? value : undefined
+}
+
+function isHeadroomResponseTarget(value, options) {
+  const base = headroomRouteUrl(options?.headroomBaseUrl)
+  if (!base || value.host !== new URL(base).host) return false
+  const match = /^(?:http|ws):\/\/127\.0\.0\.1:([1-9]\d{0,4})\/backend-api\/codex\/responses$/u.exec(value.toString())
+  return !!match && Number(match[1]) <= 65535
+}
+
 const networkScope = new AsyncLocalStorage()
 let activeScopes = 0
 let baseFetch
@@ -175,8 +188,9 @@ export async function withCodexNetwork(run, options = {}) {
       construct(target, args, newTarget) {
         const scope = networkScope.getStore()
         const url = new URL(String(args[0]))
-        if (!scope?.options.websocket || url.protocol !== 'wss:' || url.hostname !== CODEX_SUBSCRIPTION_HOST) return Reflect.construct(target, args, newTarget)
-        const proxy = scope.options.websocketProxy
+        const local = isHeadroomResponseTarget(url, scope?.options) && url.protocol === 'ws:'
+        if (!scope?.options.websocket || (!local && (url.protocol !== 'wss:' || url.hostname !== CODEX_SUBSCRIPTION_HOST))) return Reflect.construct(target, args, newTarget)
+        const proxy = local ? undefined : scope.options.websocketProxy
         return new WebSocket(args[0], { ...args[1], ...(proxy ? { agent: new HttpsProxyAgent(proxy) } : {}) })
       },
     })
@@ -191,6 +205,10 @@ export async function withCodexNetwork(run, options = {}) {
       const { options: scopedOptions, allowedHosts, resolved } = scope
       const proxyFetch = scopedOptions.fetchThroughProxy ?? fetchThroughProxy
       const target = new URL(typeof input === 'string' || input instanceof URL ? input : input.url)
+      if (target.protocol === 'http:' && isHeadroomResponseTarget(target, scopedOptions)) {
+        const response = await baseFetch(input, init)
+        return scopedOptions.transformResponse?.(response, target) ?? response
+      }
       if (target.protocol !== 'https:' || !allowedHosts.has(target.hostname)) return baseFetch(input, init)
       let proxy = resolved.get(target.hostname)
       if (proxy === undefined) {

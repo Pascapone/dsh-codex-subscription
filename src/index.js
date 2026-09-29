@@ -160,6 +160,7 @@ export function apply(ctx, config = {}) {
   const provider = openaiCodexSubscriptionProvider({
     connection,
     compaction,
+    resolveRoute: request => ctx.get?.('headroomRoute')?.resolve?.(request),
     resolveSpeedMode: sessionId => settings.get()[SESSION_SPEED_MODES_FIELD]?.[sessionId],
     resolveOutputVerbosity: () => normalizeOutputVerbosity(settings.get()[OUTPUT_VERBOSITY_FIELD]),
     resolveContextMode: () => normalizeContextMode(settings.get()[CONTEXT_MODE_FIELD]),

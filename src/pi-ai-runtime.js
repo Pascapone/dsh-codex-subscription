@@ -3,6 +3,7 @@
 // re-audited instead of silently changing authentication or cache semantics.
 import { openaiCodexProvider as createOpenAICodexProvider } from '@earendil-works/pi-ai/providers/openai-codex'
 import { normalizeTransportEvent } from './transport-failure.js'
+import { headroomRouteUrl } from './oauth-network.js'
 import {
   CONTEXT_MODE_CUSTOM,
   CONTEXT_MODE_EXTENDED,
@@ -36,6 +37,7 @@ export function openaiCodexSubscriptionProvider({
   resolveOutputVerbosity = () => OUTPUT_VERBOSITY_DEFAULT,
   resolveContextMode = () => undefined,
   resolveCustomContextWindow = () => undefined,
+  resolveRoute,
   catalog,
   connection,
   compaction,
@@ -95,11 +97,17 @@ export function openaiCodexSubscriptionProvider({
     const requested = clampModelContext(resolveCustomContextWindow(customContextModelKey(model.id)), maximum, model.contextWindow)
     return { ...model, contextWindow: requested }
   })
-  const networkIterable = (factory, options) => {
+  const requestModel = (model, options) => {
+    let route
+    try { route = resolveRoute?.({ provider: 'openai-codex', model: model.id, sessionId: options?.sessionId }) } catch { return model }
+    const baseUrl = route?.ready && headroomRouteUrl(route.baseUrl)
+    return baseUrl ? { ...model, baseUrl } : model
+  }
+  const networkIterable = (factory, options, baseUrl) => {
     let iterator
     let prepared
     const step = async (method, value) => {
-      const request = await (prepared ??= connection?.prepare(options) ?? Promise.resolve({ options }))
+      const request = await (prepared ??= connection?.prepare(options, baseUrl) ?? Promise.resolve({ options }))
       const result = await runNetwork('model', () => {
         iterator ??= factory(compaction?.requestOptions(request.options) ?? request.options)[Symbol.asyncIterator]()
         return iterator[method]?.(value) ?? (method === 'throw' ? Promise.reject(value) : Promise.resolve({ done: true, value }))
@@ -117,8 +125,14 @@ export function openaiCodexSubscriptionProvider({
     ...provider,
     auth: Object.freeze({ ...provider.auth, apiKey: requestToken }),
     getModels,
-    stream: (model, context, options) => networkIterable(prepared => provider.stream(model, context, prepared), withPreferences(model, options)),
-    streamSimple: (model, context, options) => networkIterable(prepared => provider.streamSimple(model, context, prepared), withPreferences(model, options)),
+    stream: (model, context, options) => {
+      const selected = requestModel(model, options)
+      return networkIterable(prepared => provider.stream(selected, context, prepared), withPreferences(model, options), selected.baseUrl)
+    },
+    streamSimple: (model, context, options) => {
+      const selected = requestModel(model, options)
+      return networkIterable(prepared => provider.streamSimple(selected, context, prepared), withPreferences(model, options), selected.baseUrl)
+    },
   })
 }
 

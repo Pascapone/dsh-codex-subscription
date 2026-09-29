@@ -1,6 +1,7 @@
 /** Experimental SSE bridge; callers must explicitly opt in. */
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash } from 'node:crypto'
+import { headroomRouteUrl } from './oauth-network.js'
 const clone = value => JSON.parse(JSON.stringify(value))
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 const key = 'codexCompactionV1'
@@ -69,7 +70,8 @@ export function createCompactionBridge({ enabled = () => false, threshold = () =
    const state = scope.getStore()
    if (!state) return options
    return { ...options, websocket: false, transformResponse: (response, target) => {
-    if (target.hostname !== 'chatgpt.com' || target.pathname !== '/backend-api/codex/responses' || !response.ok || !response.body) return response
+    const local = headroomRouteUrl(options?.headroomBaseUrl) && target.href === `${options.headroomBaseUrl}/codex/responses`
+    if ((!local && (target.hostname !== 'chatgpt.com' || target.pathname !== '/backend-api/codex/responses')) || !response.ok || !response.body) return response
     state.completed = false; state.captured = undefined
     let buffer = '', oversized = false
     const decoder = new TextDecoder()
