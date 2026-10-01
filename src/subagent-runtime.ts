@@ -1,0 +1,60 @@
+import type { ExecFileOptions } from 'node:child_process';
+import type * as OfficialRuntime from '@deepseek-ai/dsh-subagent-codex';
+import type * as Protocol from '@deepseek-ai/dsh-sdk-protocol';
+type ModuleResolver = (specifier: Parameters<NodeRequire['resolve']>[0]) => ReturnType<NodeRequire['resolve']>;
+interface RuntimeLoaderOptions { resolve?: ModuleResolver; run?: (command: string, args: readonly string[], options: Pick<ExecFileOptions, 'timeout' | 'maxBuffer' | 'windowsHide'>) => Promise<{ stdout: string }>; importModule?: (url: string) => Promise<unknown> }
+import { createRequire } from 'node:module'
+import { readFileSync } from 'node:fs'
+import { dirname, resolve as resolvePath } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+
+export const SUBAGENT_RUNTIME_PACKAGE = '@deepseek-ai/dsh-subagent-codex'
+export const SUBAGENT_RUNTIME_VERSION = '0.1.7-rc.2'
+const SUPPORTED_RUNTIME_VERSIONS = new Set(['0.1.5-rc.2', '0.1.5-rc.3', '0.1.7-rc.1', SUBAGENT_RUNTIME_VERSION])
+const require = createRequire(import.meta.url)
+const execute = promisify(execFile)
+
+// The official component declares exact DSH cohort peers. Installing the
+// newest component into an older host can appear to succeed but fail at load.
+export function matchingSubagentRuntimeVersion(resolve: ModuleResolver = require.resolve) {
+  try {
+    const raw: unknown = JSON.parse(readFileSync(resolve('@deepseek-ai/dsh-llm/package.json'), 'utf8'));
+    const host = raw as { version?: unknown };
+    return SUPPORTED_RUNTIME_VERSIONS.has(host.version as string) ? host.version as string : undefined
+  } catch { return undefined }
+}
+
+// Resolve from this plugin's dependency graph, then use the provider's own
+// protocol and CLI. Never search PATH or a desktop application's private files.
+export function inspectSubagentRuntime(resolve: ModuleResolver = require.resolve) {
+  try {
+    const manifestPath = resolve(`${SUBAGENT_RUNTIME_PACKAGE}/package.json`)
+    const raw: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    const manifest = raw as { version?: unknown };
+    if (!SUPPORTED_RUNTIME_VERSIONS.has(manifest.version as string) || manifest.version !== matchingSubagentRuntimeVersion(resolve)) return { installed: false, present: true }
+    return { installed: true }
+  } catch { return { installed: false } }
+}
+
+export async function loadSubagentRuntime({ resolve = require.resolve, run = execute, importModule = url => import(url) }: RuntimeLoaderOptions = {}) {
+  if (!inspectSubagentRuntime(resolve).installed) throw new Error('Codex subtask runtime is not prepared')
+  const entry = resolve(SUBAGENT_RUNTIME_PACKAGE)
+  const providerRequire = createRequire(entry)
+  const codexManifestPath = providerRequire.resolve('@openai/codex/package.json')
+  const raw: unknown = JSON.parse(readFileSync(codexManifestPath, 'utf8'));
+  const codex = raw as { version?: unknown; bin?: { codex?: unknown } };
+  if (codex.version !== '0.153.4' || typeof codex.bin?.codex !== 'string') throw new Error('Codex subtask runtime version is unsupported')
+  const wrapper = resolvePath(dirname(codexManifestPath), codex.bin.codex)
+  try {
+    const { stdout } = await run(process.execPath, [wrapper, '--version'], { timeout: 10000, maxBuffer: 4096, windowsHide: true })
+    if (stdout.trim() !== 'codex-cli 0.153.4') throw new Error('Unexpected CLI version')
+  } catch { throw new Error('Codex subtask runtime is incomplete; prepare it for this platform') }
+  const [official, protocol] = await Promise.all([
+    importModule(pathToFileURL(entry).href),
+    importModule(pathToFileURL(providerRequire.resolve('@deepseek-ai/dsh-sdk-protocol')).href),
+  ])
+  const { JsonRpcLineTransport: Transport } = protocol as Pick<typeof Protocol, 'JsonRpcLineTransport'>;
+  return { official: official as typeof OfficialRuntime, Transport }
+}

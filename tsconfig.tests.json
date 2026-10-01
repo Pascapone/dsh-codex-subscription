@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rewriteRelativeImportExtensions": true,
+    "lib": ["ES2023", "ESNext.Disposable", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": ["node"],
+    "noEmit": false,
+    "outDir": ".test-build",
+    "rootDir": "."
+  },
+  "include": ["tests/typescript-boundaries.test.ts", "tests/source-contract.ts", "tests/source-contract.test.ts", "tests/*.mts", "scripts/**/*.mts", ".github/scripts/*.mts"],
+  "exclude": ["tests/client-session-compat.test.mts"]
+}

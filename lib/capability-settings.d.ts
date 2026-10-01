@@ -1,0 +1,21 @@
+import type { CapabilitySettings, QuotaAlertMode, QuotaWarningUsage } from './settings-types.js';
+export declare const CUSTOM_CONTEXT_OVERRIDES_FIELD = "customContextModels";
+export declare const SEARCH_MODE_FIELD = "searchMode";
+export declare const SEARCH_DOMAINS_FIELD = "searchDomains";
+export declare const QUOTA_ALERTS_FIELD = "quotaAlerts";
+export declare const SEARCH_MODES: readonly ["live", "cached", "disabled"];
+export declare const QUOTA_ALERT_MODES: readonly ["off", "important", "early", "custom"];
+export declare const QUOTA_THRESHOLD_FIELDS: readonly ["quotaShortThreshold", "quotaLongThreshold"];
+export declare const validQuotaThreshold: (value: unknown) => value is number;
+export declare const MAX_CONTEXT_BUDGET = 16000000;
+export declare const validModelKey: (key: unknown) => key is string;
+export declare function normalizeContextOverrides(value: unknown): Record<string, number>;
+export declare function normalizeSearchDomains(value: unknown): string[];
+export declare function readCapabilitySettings(value?: Record<string, unknown>): CapabilitySettings;
+export declare function capabilityPatch(payload: Record<string, unknown> | null | undefined): Partial<CapabilitySettings>;
+export declare function quotaWarning(usage: QuotaWarningUsage | undefined, mode?: QuotaAlertMode, now?: number, thresholds?: Record<string, unknown>): {
+    limitId: string;
+    remainingPercent: number;
+    windowSeconds: number;
+    resetsAt?: number;
+} | undefined;

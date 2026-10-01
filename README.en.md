@@ -2,17 +2,17 @@
 
 # DSH Codex Subscription — Use ChatGPT subscriptions in DeepSeek Harness
 
-[简体中文](https://github.com/WSL043/dsh-codex-subscription/blob/main/README.md) · **English**
+[简体中文](https://github.com/Pascapone/dsh-codex-subscription/blob/main/README.md) · **English**
 
 **Use your ChatGPT / Codex subscription directly in DeepSeek Harness**
 
 No OpenAI API key or Codex CLI. Models, search, quota, and image generation stay inside DSH.
 
-[![CI](https://github.com/WSL043/dsh-codex-subscription/actions/workflows/ci.yml/badge.svg)](https://github.com/WSL043/dsh-codex-subscription/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/dsh-codex-subscription?logo=npm&label=npm)](https://www.npmjs.com/package/dsh-codex-subscription)
-[![total npm downloads](https://img.shields.io/npm/dt/dsh-codex-subscription?logo=npm&label=total%20downloads)](https://www.npmjs.com/package/dsh-codex-subscription)
+[![CI](https://github.com/Pascapone/dsh-codex-subscription/actions/workflows/ci.yml/badge.svg)](https://github.com/Pascapone/dsh-codex-subscription/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@pascapone/dsh-codex-subscription?logo=npm&label=npm)](https://www.npmjs.com/package/@pascapone/dsh-codex-subscription)
+[![total npm downloads](https://img.shields.io/npm/dt/@pascapone/dsh-codex-subscription?logo=npm&label=total%20downloads)](https://www.npmjs.com/package/@pascapone/dsh-codex-subscription)
 [![MIT](https://img.shields.io/badge/license-MIT-111111.svg)](LICENSE)
-[![Star](https://img.shields.io/github/stars/WSL043/dsh-codex-subscription?style=flat&logo=github&label=Star)](https://github.com/WSL043/dsh-codex-subscription/stargazers)
+[![Star](https://img.shields.io/github/stars/Pascapone/dsh-codex-subscription?style=flat&logo=github&label=Star)](https://github.com/Pascapone/dsh-codex-subscription/stargazers)
 
 [Three-step start](#three-step-start) · [Install](#install) · [Contribute](CONTRIBUTING.md) · [Update and uninstall](#update-and-uninstall)
 
@@ -26,7 +26,7 @@ Compatible with DSH `0.1.7-rc.2` plugin compatibility checks and settings APIs, 
 
 ## Three-step start
 
-1. **Install the plugin.** Open **Plugins → Add plugin**, enter `dsh-codex-subscription` in **Package name or address**, and click **Install**.
+1. **Install the plugin.** Open **Plugins → Add plugin**, enter `@pascapone/dsh-codex-subscription` in **Package name or address**, and click **Install**.
 2. **Sign in.** Follow the installation result; save your work and restart only if requested. Open **Settings -> Codex**, and choose browser sign-in. No Codex CLI and no pasted token are required.
 3. **Use Codex.** Select a Codex model. Quota, subscription search, image generation, and Fast mode remain inside DSH.
 
@@ -73,7 +73,7 @@ This plugin supports the latest DeepSeek Harness release recorded in its package
 2. Paste a package name into the **Package name or address** field:
 
    ```text
-   dsh-codex-subscription
+   @pascapone/dsh-codex-subscription
    ```
 
    For DSH `0.1.7-rc.2`, use this fork's GitHub address until `2.2.1` is published to npm:
@@ -91,7 +91,7 @@ The GitHub address installs this fork's `2.2.1` build with DSH `0.1.7-rc.2` supp
 <summary>Terminal installation (with an existing dsh command)</summary>
 
 ```sh
-dsh plugin --profile web add dsh-codex-subscription
+dsh plugin --profile web add @pascapone/dsh-codex-subscription
 ```
 
 Follow the restart instructions, then sign in under **Settings → Codex**. Both the Plugins page and the terminal use DSH's installation management.
@@ -104,7 +104,7 @@ Follow the restart instructions, then sign in under **Settings → Codex**. Both
 After signing in and selecting a Codex model in Web, install the same plugin in the Headless profile:
 
 ```sh
-dsh plugin --profile headless add dsh-codex-subscription
+dsh plugin --profile headless add @pascapone/dsh-codex-subscription
 dsh --profile headless "Reply with only the word: ok"
 ```
 
@@ -214,11 +214,11 @@ Astra drew the original in stages. This Chinese prompt provides a starting point
 请基于本条附加草图实际调用订阅图片工具一次，生成成品插画。quality=low，模型使用当前默认，不切换型号，不额外生成。主题《画布背面有人》：保留4:3横构图、中央偏上的撕纸洞口、洞内拿颜料桶的小画师、流出成为S形河流的蓝色颜料、下方左侧未上色城市与右侧被点亮城市、纸船飞鸟。精修为惊艳的立体纸艺与精细手绘结合的编辑插画，纸张纤维、真实撕边及柔和投影，深靛蓝洞内星月，丰富青蓝颜料层次和流动质感，赭橙画师与暖色建筑，微小清晰的叙事细节。不重构为风景，不添加文字水印。必须使用本条参考图片编辑，不能仅凭文字生成。生成后简短说明完成即可。
 ```
 
-Original example released in: [Beta v2.1.0-beta.2](https://github.com/WSL043/dsh-codex-subscription/releases/tag/v2.1.0-beta.2)
+Original example released in: [Beta v2.1.0-beta.2](https://github.com/Pascapone/dsh-codex-subscription/releases/tag/v2.1.0-beta.2)
 
 **Mona Lisa: Astra sketch → GPT image generation**
 
-Example version: [2.1.0-beta.5](https://github.com/WSL043/dsh-codex-subscription/releases/tag/v2.1.0-beta.5)
+Example version: [2.1.0-beta.5](https://github.com/Pascapone/dsh-codex-subscription/releases/tag/v2.1.0-beta.5)
 
 Actual results supplied by the user from another computer: Astra draws on a portrait canvas, then GPT image generation turns the sketch into an oil painting.
 
@@ -296,13 +296,13 @@ Find this plugin on the DSH **Plugins** page and use its update or uninstall act
 <summary>Terminal commands</summary>
 
 ```sh
-dsh plugin --profile web update dsh-codex-subscription
+dsh plugin --profile web update @pascapone/dsh-codex-subscription
 ```
 
 Run only when you want to uninstall:
 
 ```sh
-dsh plugin --profile web remove dsh-codex-subscription
+dsh plugin --profile web remove @pascapone/dsh-codex-subscription
 ```
 
 </details>
@@ -312,16 +312,16 @@ dsh plugin --profile web remove dsh-codex-subscription
 - **`dsh` is not recognized:** install from the DSH Plugins page; no terminal setup is needed.
 - **More than one DSH exists:** run the standard command from the intended DSH environment so that product selects the corresponding profile;
 - **Setup still fails:** confirm the command is running in the intended DSH environment. Do not delete the profile or change the system PATH to force an install.
-- **Need to report a problem:** generate a **Support diagnostics** report at the bottom of Settings, then open the [bug report form](https://github.com/WSL043/dsh-codex-subscription/issues/new?template=install-problem.yml). The report includes the OS/runtime, bounded sign-in phase, and safe request-failure categories, but excludes credentials, account identifiers, raw responses, and full logs. Paste it into the required diagnostics field; never attach sign-in URLs, authorization codes, or browser callback addresses.
+- **Need to report a problem:** generate a **Support diagnostics** report at the bottom of Settings, then open the [bug report form](https://github.com/Pascapone/dsh-codex-subscription/issues/new?template=install-problem.yml). The report includes the OS/runtime, bounded sign-in phase, and safe request-failure categories, but excludes credentials, account identifiers, raw responses, and full logs. Paste it into the required diagnostics field; never attach sign-in URLs, authorization codes, or browser callback addresses.
 
 The ChatGPT Codex backend and DSH can change independently. This community project is not affiliated with or endorsed by DeepSeek or OpenAI.
 
-Use the [bug report form](https://github.com/WSL043/dsh-codex-subscription/issues/new?template=install-problem.yml) for project feedback.
-Use the [feature request form](https://github.com/WSL043/dsh-codex-subscription/issues/new?template=feature-request.yml) for focused product suggestions.
+Use the [bug report form](https://github.com/Pascapone/dsh-codex-subscription/issues/new?template=install-problem.yml) for project feedback.
+Use the [feature request form](https://github.com/Pascapone/dsh-codex-subscription/issues/new?template=feature-request.yml) for focused product suggestions.
 Focused fixes and compatibility improvements are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
 For DSH plugin discussion, visit [DeepSeek Harness Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).
 Read [SECURITY.md](SECURITY.md) before reporting sensitive issues.
 
-If this project is useful, the [Star button](https://github.com/WSL043/dsh-codex-subscription/stargazers) helps more DSH users find it.
+If this project is useful, the [Star button](https://github.com/Pascapone/dsh-codex-subscription/stargazers) helps more DSH users find it.
 
 [简体中文](README.md) · [MIT](LICENSE)

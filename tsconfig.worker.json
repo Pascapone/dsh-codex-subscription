@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "lib": ["ES2023", "WebWorker"], "types": [], "noEmit": false, "declaration": true, "outDir": ".test-build", "rootDir": "." },
+  "include": ["src/sketch-psd-worker.ts"]
+}

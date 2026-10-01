@@ -1,0 +1,15 @@
+import type { createPreferenceController } from './preference-controller.js';
+import type { createAccountStatusController } from './account-status-controller.js';
+import type { createSubscriptionRpcClient } from './rpc-contract.js';
+export type Translate = import('@deepseek-ai/dsh-client-ui-slots').Translate;
+export type PreferenceController = ReturnType<typeof createPreferenceController>;
+export type AccountStatusController = ReturnType<typeof createAccountStatusController>;
+export type SubscriptionRpcClient = ReturnType<typeof createSubscriptionRpcClient>;
+export type PreferenceState = ReturnType<PreferenceController['getSnapshot']>;
+export type AccountStatusState = ReturnType<AccountStatusController['getSnapshot']>;
+export type CodexUiProps = {
+    preference: PreferenceController;
+    rpc: SubscriptionRpcClient;
+    accountStatus: AccountStatusController;
+    t: Translate;
+};

@@ -324,17 +324,17 @@ jobs:
           ## Install or update the Beta
 
           \`\`\`sh
-          dsh plugin --profile web add dsh-codex-subscription@$RELEASE_VERSION
+          dsh plugin --profile web add @pascapone/dsh-codex-subscription@$RELEASE_VERSION
           \`\`\`
 
           Restart DSH manually. This Beta does not replace npm's stable tag.
 
-          Use this exact-version command for both installation and update. See the [English README](https://github.com/WSL043/dsh-codex-subscription/blob/main/README.en.md) for complete use and uninstall instructions.
+          Use this exact-version command for both installation and update. See the [English README](https://github.com/Pascapone/dsh-codex-subscription/blob/main/README.en.md) for complete use and uninstall instructions.
 
           ## Uninstall
 
           \`\`\`sh
-          dsh plugin --profile web remove dsh-codex-subscription
+          dsh plugin --profile web remove @pascapone/dsh-codex-subscription
           \`\`\`
           NOTES
             append_contributors en
@@ -349,17 +349,17 @@ jobs:
           ## 安装或更新 Beta
 
           \`\`\`sh
-          dsh plugin --profile web add dsh-codex-subscription@$RELEASE_VERSION
+          dsh plugin --profile web add @pascapone/dsh-codex-subscription@$RELEASE_VERSION
           \`\`\`
 
           安装后手动重启 DSH。Beta 不会替换 npm 的稳定版标签。
 
-          这条精确版本命令同时用于安装和更新。完整的使用和卸载说明见[中文 README](https://github.com/WSL043/dsh-codex-subscription/blob/main/README.md)。
+          这条精确版本命令同时用于安装和更新。完整的使用和卸载说明见[中文 README](https://github.com/Pascapone/dsh-codex-subscription/blob/main/README.md)。
 
           ## 卸载
 
           \`\`\`sh
-          dsh plugin --profile web remove dsh-codex-subscription
+          dsh plugin --profile web remove @pascapone/dsh-codex-subscription
           \`\`\`
           NOTES
             append_contributors zh-CN
@@ -388,7 +388,7 @@ jobs:
           ### Standard DSH command
 
           ```sh
-          dsh plugin --profile web add dsh-codex-subscription
+          dsh plugin --profile web add @pascapone/dsh-codex-subscription
           ```
 
           Restart DSH manually after installation.
@@ -396,15 +396,15 @@ jobs:
           ### Update
 
           ```sh
-          dsh plugin --profile web update dsh-codex-subscription
+          dsh plugin --profile web update @pascapone/dsh-codex-subscription
           ```
 
-          See the [English README](https://github.com/WSL043/dsh-codex-subscription/blob/main/README.en.md) for complete use and uninstall instructions.
+          See the [English README](https://github.com/Pascapone/dsh-codex-subscription/blob/main/README.en.md) for complete use and uninstall instructions.
 
           ### Uninstall
 
           ```sh
-          dsh plugin --profile web remove dsh-codex-subscription
+          dsh plugin --profile web remove @pascapone/dsh-codex-subscription
           ```
           NOTES
           cat >> .release/install.md <<'NOTES'
@@ -434,7 +434,7 @@ jobs:
           ### DSH 标准命令
 
           ```sh
-          dsh plugin --profile web add dsh-codex-subscription
+          dsh plugin --profile web add @pascapone/dsh-codex-subscription
           ```
 
           安装后手动重启 DSH。
@@ -442,15 +442,15 @@ jobs:
           ### 更新
 
           ```sh
-          dsh plugin --profile web update dsh-codex-subscription
+          dsh plugin --profile web update @pascapone/dsh-codex-subscription
           ```
 
-          完整的使用和卸载说明见[中文 README](https://github.com/WSL043/dsh-codex-subscription/blob/main/README.md)。
+          完整的使用和卸载说明见[中文 README](https://github.com/Pascapone/dsh-codex-subscription/blob/main/README.md)。
 
           ### 卸载
 
           ```sh
-          dsh plugin --profile web remove dsh-codex-subscription
+          dsh plugin --profile web remove @pascapone/dsh-codex-subscription
           ```
           NOTES
           sed -i "s/__DSH_VERSION__/$current_dsh/g" .release/install.md
@@ -654,9 +654,9 @@ jobs:
         shell: bash
         run: |
           version="$(node -p "require('./package.json').version")"
-          if npm view "dsh-codex-subscription@$version" version >/dev/null 2>&1; then
+          if npm view "@pascapone/dsh-codex-subscription@$version" version >/dev/null 2>&1; then
             echo "needed=false" >> "$GITHUB_OUTPUT"
-            echo "dsh-codex-subscription@$version is already published; skipping duplicate npm publish."
+            echo "@pascapone/dsh-codex-subscription@$version is already published; skipping duplicate npm publish."
           else
             echo "needed=true" >> "$GITHUB_OUTPUT"
           fi

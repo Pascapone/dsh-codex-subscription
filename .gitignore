@@ -1,4 +1,6 @@
 node_modules/
+.test-build/
+.build/
 .artifacts/
 output/
 *.tgz

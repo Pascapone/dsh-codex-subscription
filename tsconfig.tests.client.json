@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.tests.json",
+  "include": ["tests/client-session-compat.test.mts"],
+  "exclude": []
+}

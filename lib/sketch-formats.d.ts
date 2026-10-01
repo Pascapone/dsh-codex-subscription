@@ -1,0 +1,10 @@
+import type { Psd } from 'ag-psd';
+import type { SketchDocument } from './sketch-types.js';
+import type { RasterPsd } from './sketch-psd-types.js';
+export declare const SKETCH_FILE_ACCEPT = ".psd,.dsh-sketch.json,image/png,image/jpeg,image/webp";
+export declare function runPsdCodec(action: 'read', payload: ArrayBuffer): Promise<RasterPsd>;
+export declare function runPsdCodec(action: 'write', payload: Psd): Promise<ArrayBuffer>;
+export declare function encodeSketchDocument(doc: SketchDocument): string;
+export declare function decodeSketchDocument(text: string): SketchDocument;
+export declare function exportSketchPsd(doc: SketchDocument, images: ReadonlyMap<string, CanvasImageSource>, composite: HTMLCanvasElement): Promise<ArrayBuffer>;
+export declare function importSketchPsd(file: File): Promise<SketchDocument>;

@@ -38,8 +38,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          published="$(npm view dsh-codex-subscription dist-tags.latest)"
-          node scripts/ci-change-plan.mjs --base "$BASE_SHA" --published "$published"
+          published="$(npm view @pascapone/dsh-codex-subscription dist-tags.latest)"
+          node --experimental-strip-types scripts/ci-change-plan.mts --base "$BASE_SHA" --published "$published"
 
   behavior:
     name: Runtime behavior and candidate package
@@ -110,7 +110,7 @@ jobs:
           package-manager-cache: false
       - name: Exercise manager discovery, update, cancel, and failure paths
         shell: powershell
-        run: node --test tests/powershell-manager.test.mjs
+        run: node --experimental-strip-types --test tests/powershell-manager.test.mts
         env:
           DSH_CODEX_TEST_USER_PATH: '1'
 

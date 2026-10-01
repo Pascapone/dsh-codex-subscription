@@ -1,0 +1,282 @@
+import type { Api, Model, ModelThinkingLevel, ThinkingLevelMap, AuthOperationOptions } from '@earendil-works/pi-ai';
+import type { CodexModel, RemoteModel, ModelCatalogOptions } from './model-types.js';
+import { PACKAGE_VERSION, USER_AGENT } from './version.js'
+import { DSH_MODEL_PROMPTS } from './codex-base-prompts.js'
+
+export const CODEX_MODELS_URL = `https://chatgpt.com/backend-api/codex/models?client_version=${encodeURIComponent(PACKAGE_VERSION)}`
+
+const LEVELS: ModelThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
+const DEFAULT_REFRESH_TIMEOUT_MS = 10_000
+const BUNDLED_FALLBACK_MODELS: readonly Readonly<RemoteModel>[] = Object.freeze([
+  Object.freeze({
+    id: 'gpt-6-luna',
+    name: 'GPT-6 Luna',
+    description: 'Efficient model for focused, high-volume tasks.',
+    priority: 3,
+    input: ['text', 'image'] as Model<Api>['input'],
+    contextWindow: 272_000,
+    maxContextWindow: 872_000,
+    reasoning: true,
+    thinkingLevelMap: { off: null, minimal: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
+    supportVerbosity: true,
+    defaultVerbosity: 'low',
+    supportsFast: true,
+    templateId: 'gpt-5.6-luna',
+  }),
+  Object.freeze({
+    id: 'gpt-6-sol',
+    name: 'GPT-6 Sol',
+    description: 'Workhorse model for complex coding and agentic workflows.',
+    priority: 2,
+    input: ['text', 'image'] as Model<Api>['input'],
+    contextWindow: 272_000,
+    maxContextWindow: 872_000,
+    reasoning: true,
+    thinkingLevelMap: { off: null, minimal: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
+    supportVerbosity: true,
+    defaultVerbosity: 'low',
+    supportsFast: true,
+    templateId: 'gpt-5.6-sol',
+  }),
+  Object.freeze({
+    id: 'gpt-6.1-sol',
+    name: 'GPT-6.1-Sol',
+    description: 'Latest workhorse model for coding and everyday work.',
+    priority: 1,
+    input: ['text', 'image'] as Model<Api>['input'],
+    contextWindow: 272_000,
+    maxContextWindow: 872_000,
+    reasoning: true,
+    thinkingLevelMap: { off: null, minimal: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
+    supportVerbosity: true,
+    defaultVerbosity: 'low',
+    supportsFast: true,
+    templateId: 'gpt-5.6-sol',
+  }),
+])
+const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
+const nonEmpty = (value: unknown): string | undefined => typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+const positiveInteger = (value: unknown): number | undefined => Number.isSafeInteger(value) && (value as number) > 0 ? value as number : undefined
+
+function reasoningMap(levels: unknown): ThinkingLevelMap {
+  const supported = new Set((Array.isArray(levels) ? levels as unknown[] : [])
+    .map(level => nonEmpty(record(level) ? level.effort : undefined))
+    .filter(Boolean) as string[])
+  const map: ThinkingLevelMap = Object.fromEntries(LEVELS.map(level => [level, null]))
+  if (supported.has('none')) map.off = 'none'
+  for (const level of LEVELS.slice(1)) {
+    if (supported.has(level)) map[level] = level
+  }
+  return map
+}
+
+const capabilityNames = (values: readonly unknown[]): string[] => [...new Set(values.filter(value =>
+  typeof value === 'string' && /^[a-z][a-z0-9_-]{0,31}$/u.test(value)))].sort().slice(0, 16) as string[]
+
+function unsupportedCapabilities(value: Record<string, unknown> & { supported_reasoning_levels: unknown[] }) {
+  const reasoning = capabilityNames((value.supported_reasoning_levels ?? []).map(item => (item as {effort?: unknown} | null | undefined)?.effort))
+    .filter(level => !['none', ...LEVELS.slice(1)].includes(level))
+  const inputs = capabilityNames(Array.isArray(value.input_modalities) ? value.input_modalities : [])
+    .filter(input => !['text', 'image'].includes(input))
+  const speeds = capabilityNames([
+    ...(Array.isArray(value.additional_speed_tiers) ? value.additional_speed_tiers : []),
+    ...(Array.isArray(value.service_tiers) ? (value.service_tiers as unknown[]).map(tier => (tier as {id?: unknown} | null | undefined)?.id) : []),
+  ]).filter(tier => !['auto', 'default', 'standard', 'fast', 'priority'].includes(tier))
+  return {
+    ...(reasoning.length ? { reasoning } : {}),
+    ...(inputs.length ? { inputs } : {}),
+    ...(speeds.length ? { speeds } : {}),
+  }
+}
+
+function visibleModel(value: unknown): RemoteModel | undefined {
+  if (!record(value)) return undefined
+  const id = nonEmpty(value.slug)
+  // Reserve is a manually selected experiment, only when the account catalog
+  // actually advertises it. Do not expose other hidden models or invent it offline.
+  const reserve = id === 'gpt-reserve' && (['list', 'hide'] as readonly unknown[]).includes(value.visibility)
+  if (id === undefined || (value.visibility !== 'list' && !reserve)) return undefined
+  const supported = Array.isArray(value.supported_reasoning_levels) ? value.supported_reasoning_levels : []
+  const input = Array.isArray(value.input_modalities)
+    ? (value.input_modalities as unknown[]).filter(item => (['text', 'image'] as readonly unknown[]).includes(item))
+    : ['text', 'image']
+  const unsupported = unsupportedCapabilities({ ...value, supported_reasoning_levels: supported })
+  return {
+    ...(Object.keys(unsupported).length ? { unsupported } : {}),
+    id,
+    name: reserve ? 'GPT-Reserve (Experimental)' : nonEmpty(value.display_name) ?? id,
+    description: nonEmpty(value.description),
+    priority: Number.isFinite(value.priority) ? value.priority as number : 0,
+    input: input.length > 0 ? input as Model<Api>['input'] : ['text'],
+    contextWindow: positiveInteger(value.context_window) ?? positiveInteger(value.max_context_window),
+    ...(positiveInteger(value.max_context_window) === undefined ? {} : { maxContextWindow: value.max_context_window as number }),
+    reasoning: supported.length > 0,
+    thinkingLevelMap: reasoningMap(supported),
+    supportVerbosity: value.support_verbosity === true,
+    defaultVerbosity: (['low', 'medium', 'high'] as readonly unknown[]).includes(value.default_verbosity) ? value.default_verbosity as RemoteModel['defaultVerbosity'] : undefined,
+
+    supportsFast: [...(Array.isArray(value.additional_speed_tiers) ? value.additional_speed_tiers : []),
+      ...(Array.isArray(value.service_tiers) ? (value.service_tiers as unknown[]).map(tier => (tier as {id?: unknown} | null | undefined)?.id) : [])]
+      .some(tier => tier === 'fast' || tier === 'priority'),
+  }
+}
+
+export function parseOfficialModelCatalog(value: unknown): RemoteModel[] {
+  if (!record(value) || !Array.isArray(value.models)) throw new Error('Codex returned a malformed model catalog')
+  const seen = new Set<string>()
+  return ((value.models as unknown[])
+    .map(visibleModel)
+    .filter(model => model !== undefined && !seen.has(model.id) && seen.add(model.id)) as RemoteModel[])
+    .sort((left, right) => Number(left.id === 'gpt-reserve') - Number(right.id === 'gpt-reserve')
+      || right.priority - left.priority)
+}
+
+function mergeModel(baseModels: readonly CodexModel[], remote: Readonly<RemoteModel>): CodexModel | undefined {
+  const base = baseModels.find(model => model.id === remote.id)
+    ?? baseModels.find(model => model.id === remote.templateId)
+    ?? baseModels.find(model => model.id !== 'gpt-5.3-codex-spark')
+    ?? baseModels[0]
+  if (base === undefined) return undefined
+  return {
+    ...base,
+    id: remote.id,
+    name: remote.name,
+    input: remote.input,
+    reasoning: remote.reasoning,
+    thinkingLevelMap: remote.thinkingLevelMap,
+    ...(remote.contextWindow === undefined ? {} : { contextWindow: remote.contextWindow }),
+    ...(remote.maxContextWindow === undefined ? {} : { maxContextWindow: remote.maxContextWindow }),
+    // Subscription-backed models do not expose API billing to this plugin.
+    ...(base.id === remote.id ? {} : { cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }),
+  }
+}
+
+export function addBundledCodexFallbacks(baseModels: readonly CodexModel[]): CodexModel[] {
+  const visible = baseModels.filter(model => model.id !== 'gpt-5.3-codex-spark')
+  const existing = new Set(visible.map(model => model.id))
+  const bundled = BUNDLED_FALLBACK_MODELS
+    .filter(model => !existing.has(model.id))
+    .map(model => mergeModel(baseModels, model))
+    .filter(Boolean) as CodexModel[]
+  return [...bundled, ...visible]
+}
+
+export function createOfficialModelCatalog(options: ModelCatalogOptions = {}) {
+  const fetchCatalog = options.fetch ?? fetch
+  const scheduleTimeout = options.setTimeout ?? setTimeout
+  const cancelTimeout = options.clearTimeout ?? clearTimeout
+  const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs! > 0
+    ? options.timeoutMs!
+    : DEFAULT_REFRESH_TIMEOUT_MS
+  let models: CodexModel[] | undefined
+  let metadata = new Map<string, RemoteModel>()
+  let etag: string | undefined
+  let revision = 0
+  let refreshing: { generation: number; promise: Promise<boolean>; cancel(): void } | undefined
+  let generation = 0
+  let refreshStatus: 'idle' | 'refreshing' | 'ok' | 'failed' = 'idle'
+
+  const refresh = ({ signal }: AuthOperationOptions = {}): Promise<boolean> => {
+    if (signal?.aborted) return Promise.reject(signal.reason ?? new Error('Codex model catalog refresh aborted'))
+    if (refreshing?.generation === generation) return refreshing.promise
+    const currentGeneration = generation
+    refreshStatus = 'refreshing'
+    let outcome: 'idle' | 'ok' | 'failed' = 'idle'
+    const controller = new AbortController()
+    const abort = () => {
+      if (!controller.signal.aborted) controller.abort(signal?.reason ?? new Error('Codex model catalog refresh aborted'))
+    }
+    signal?.addEventListener('abort', abort, { once: true })
+    const requestSignal = controller.signal
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeoutError = new Error('Codex model catalog refresh timed out')
+    const work = (async () => {
+      const auth = await options.getAuth!({ signal: requestSignal })
+      if (currentGeneration !== generation || requestSignal.aborted) return false
+      const credential = await options.readCredential!({ signal: requestSignal })
+      if (currentGeneration !== generation || requestSignal.aborted) return false
+      const access = auth?.auth?.apiKey
+      const accountId = credential?.type === 'oauth' ? credential.accountId : undefined
+      if (typeof access !== 'string' || access.length === 0 || typeof accountId !== 'string' || accountId.length === 0) {
+        return false
+      }
+      const headers = {
+        authorization: `Bearer ${access}`,
+        'chatgpt-account-id': accountId,
+        accept: 'application/json',
+        originator: 'pi',
+        'user-agent': USER_AGENT,
+        ...(etag === undefined ? {} : { 'if-none-match': etag }),
+      }
+      const response = await fetchCatalog(CODEX_MODELS_URL, { method: 'GET', redirect: 'error', headers, signal: requestSignal })
+      if (currentGeneration !== generation || requestSignal.aborted) return false
+      if (response.status === 304) {
+        outcome = 'ok'
+        return false
+      }
+      if (!response.ok) throw new Error(`Codex model catalog failed (HTTP ${response.status})`)
+      const remote = parseOfficialModelCatalog(await response.json())
+      if (currentGeneration !== generation || requestSignal.aborted) return false
+      if (remote.length === 0) throw new Error('Codex returned an empty model catalog')
+      const baseModels = options.baseModels!()
+      const next = remote.map(model => mergeModel(baseModels, model)).filter(Boolean) as CodexModel[] as CodexModel[]
+      if (next.length === 0) throw new Error('Codex model catalog has no compatible models')
+      if (currentGeneration !== generation || requestSignal.aborted) return false
+      models = next
+      metadata = new Map(remote.map(model => [model.id, model]))
+      etag = nonEmpty(response.headers.get('etag')) ?? etag
+      revision += 1
+      outcome = 'ok'
+      return true
+    })()
+    let rejectAborted!: () => void
+    const abortPromise = new Promise<never>((_, reject) => {
+      rejectAborted = () => reject(requestSignal.reason ?? new Error('Codex model catalog refresh aborted'))
+      if (requestSignal.aborted) rejectAborted()
+      else requestSignal.addEventListener('abort', rejectAborted, { once: true })
+    })
+    timer = scheduleTimeout(() => controller.abort(timeoutError), timeoutMs)
+    timer.unref?.()
+    const promise = Promise.race([work, abortPromise]).catch(error => {
+      outcome = 'failed'
+      throw error
+    }).finally(() => {
+      cancelTimeout(timer)
+      signal?.removeEventListener('abort', abort)
+      requestSignal.removeEventListener('abort', rejectAborted)
+      if (refreshing?.promise === promise) {
+        refreshing = undefined
+        refreshStatus = outcome
+      }
+    })
+    refreshing = { generation: currentGeneration, promise, cancel: () => controller.abort() }
+    return promise
+  }
+
+  return Object.freeze({
+    refresh,
+    // Keep current recommended models usable when the account catalog cannot be
+    // refreshed. A successful official catalog remains authoritative.
+    getModels: (fallback: readonly CodexModel[]): CodexModel[] => models ?? addBundledCodexFallbacks(fallback),
+    metadata: (modelId: string | undefined) => metadata.get(modelId!),
+    // Remote model capabilities may change; reviewed DSH instructions must not.
+    basePrompt: (modelId: string) => Object.hasOwn(DSH_MODEL_PROMPTS, modelId) ? (DSH_MODEL_PROMPTS as Readonly<Record<string, string>>)[modelId] : undefined,
+    revision: () => revision,
+    capabilityGaps: () => [...metadata.values()]
+      .filter(model => model.unsupported && /^[a-z][a-z0-9._-]{0,79}$/u.test(model.id))
+      .slice(0, 20)
+      .map(model => ({ model: model.id, ...structuredClone(model.unsupported) })),
+    status: () => ({ source: models === undefined ? 'fallback' : 'online', refresh: refreshStatus }),
+    clear() {
+      generation += 1
+      const flight = refreshing
+      refreshing = undefined
+      flight?.cancel()
+      models = undefined
+      metadata = new Map()
+      etag = undefined
+      refreshStatus = 'idle'
+      revision += 1
+    },
+  })
+}

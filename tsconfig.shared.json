@@ -1,0 +1,43 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"],
+    "types": [],
+    "noEmit": false,
+    "declaration": true,
+    "outDir": ".test-build",
+    "rootDir": "."
+  },
+  "include": [
+    "src/settings-types.ts",
+    "src/settings-contract.ts",
+    "src/capability-settings.ts",
+    "src/preference-fields.ts",
+    "src/image-models.ts",
+    "src/image-features.ts",
+    "src/codex-base-prompts.ts",
+    "src/version.ts",
+    "src/login-progress.ts",
+    "src/rpc-contract.ts",
+    "src/account-status-controller.ts",
+    "src/context-draft-state.ts",
+    "src/image-setting-groups.ts",
+    "src/sketch-operation-gate.ts",
+    "src/image-original-contract.ts",
+    "src/client-styles.ts",
+    "src/subscription-image-viewer-styles.ts",
+    "src/sketch-styles.ts",
+    "src/client-locales.ts",
+    "src/quota-rate-interval.ts",
+    "src/forecast-types.ts",
+    "src/voice-waveform.ts",
+    "src/client-recovery.ts",
+    "src/sketch-tool-widths.ts",
+    "src/sidebar-quota.ts",
+    "src/original-image-download.ts",
+    "src/preference-controller.ts",
+    "src/preference-types.ts",
+    "src/image-edit.ts",
+    "src/sketch-types.ts", "src/sketch-document.ts", "src/sketch-brushes.ts", "src/sketch-text.ts", "src/sketch-input.ts", "src/sketch-curves.ts", "src/sketch-layers.ts", "src/sketch-objects.ts", "src/sketch-presets.ts", "src/sketch-gesture.ts", "src/sketch-layer-renderer.ts", "src/sketch-shortcuts.ts", "src/sketch-commands.ts", "src/sketch-drafts.ts", "src/sketch-agent-run.ts", "src/sketch-formats.ts", "src/sketch-session-state.ts", "src/sketch-document-lifecycle.ts", "src/subscription-image-viewer.ts", "src/sketch-agent-export.ts"
+  ]
+}

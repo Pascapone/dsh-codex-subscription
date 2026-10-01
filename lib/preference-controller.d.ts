@@ -1,0 +1,58 @@
+import type { createSubscriptionRpcClient } from './rpc-contract.js';
+import type { ContextModelDescriptor, PreferenceScope, PreferenceValue } from './preference-types.js';
+export declare function createPreferenceController(scope: PreferenceScope, rpc: Pick<ReturnType<typeof createSubscriptionRpcClient>, 'call'>): {
+    getSnapshot: () => Readonly<{
+        connectionMode: string;
+        compactionMode: string;
+        codexBasePrompt: boolean;
+        subagentBackend: string;
+        subagentBackendAvailable: boolean;
+        subagentRuntimeInstalled: boolean;
+        quickQuotaMode: import("./settings-types.js").QuickQuotaMode;
+        searchProvider: import("./settings-types.js").SearchProvider;
+        speedMode: import("./settings-types.js").SpeedMode;
+        sessionSpeedModes: {
+            [x: string]: unknown;
+        };
+        outputVerbosity: import("./settings-types.js").OutputVerbosity;
+        contextMode: import("./settings-types.js").ContextMode;
+        customContextWindow: number;
+        customContextWindows: {
+            [x: string]: number;
+        };
+        contextModels: ContextModelDescriptor[];
+        verbosityModels: string[];
+        fastModels: string[] | undefined;
+        catalogStatus: unknown;
+        modelsLoading: boolean;
+        modelError: boolean;
+        writable: boolean;
+        saving: boolean;
+        error: boolean;
+        imageGeneration: boolean;
+        imageShortcut: boolean;
+        imageEditing: boolean;
+        imageViewer: boolean;
+        imageAnnotations: boolean;
+        imageSketch: boolean;
+        imageSketchAgent: boolean;
+        imageSketchAgentPreview: boolean;
+        imageModel: import("./settings-types.js").ImageModel;
+        imageQuality: import("./settings-types.js").ImageQuality;
+        quotaShortThreshold: number;
+        quotaLongThreshold: number;
+        customContextModels: Record<string, number>;
+        searchMode: import("./settings-types.js").SearchMode;
+        searchDomains: string[];
+        quotaAlerts: import("./settings-types.js").QuotaAlertMode;
+        transcriptionEnabled: boolean;
+        status: "ready" | "loading" | "unavailable";
+    }>;
+    subscribe: (listener: () => void) => () => boolean;
+    load: () => Promise<void>;
+    set: (patch: PreferenceValue) => Promise<void>;
+    setSpeed: (sessionId: string, speedMode: unknown) => Promise<void>;
+    retry: () => Promise<void>;
+    refreshModels: () => Promise<boolean>;
+    dispose: () => void;
+};

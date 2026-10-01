@@ -1,0 +1,22 @@
+import * as primitives from '@deepseek-ai/dsh-client-ui-primitives';
+export declare const Input: typeof primitives.Input;
+export declare const Button: import("react").ForwardRefExoticComponent<{
+    variant?: primitives.ButtonVariant;
+    size?: "md" | "sm";
+    icon?: import("react").ReactNode;
+    className?: string | undefined;
+    children?: import("react").ReactNode;
+} & import("react").ButtonHTMLAttributes<HTMLButtonElement> & import("react").RefAttributes<HTMLButtonElement>>;
+export declare const useAnchoredPosition: typeof primitives.useAnchoredPosition;
+export declare const useDismissOnOutsidePointer: typeof primitives.useDismissOnOutsidePointer;
+export declare const IconCheckOutline16: (props: primitives.IconProps) => import("react").JSX.Element;
+export declare const IconChevronDownOutline14: (props: primitives.IconProps) => import("react").JSX.Element;
+export declare const IconChevronRightOutline14: (props: primitives.IconProps) => import("react").JSX.Element;
+export declare const Menu: typeof primitives.Menu;
+export declare const Tooltip: typeof primitives.Tooltip;
+export declare const IconChevronLeftOutline14: (props: primitives.IconProps) => import("react").JSX.Element;
+export declare const IconCloseOutline16: (props: primitives.IconProps) => import("react").JSX.Element;
+export declare const IconCopyOutline16: (props: primitives.IconProps) => import("react").JSX.Element;
+export declare const IconDownloadOutline16: (props: primitives.IconProps) => import("react").JSX.Element;
+export declare const IconEditOutline16: (props: primitives.IconProps) => import("react").JSX.Element;
+export declare const IconFullscreenOutline16: (props: primitives.IconProps) => import("react").JSX.Element;

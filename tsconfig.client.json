@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "jsx": "react-jsx",
+    "noEmit": false,
+    "declaration": true,
+    "outDir": ".test-build",
+    "rootDir": "."
+  },
+  "include": ["src/image-conversation-node.ts", "src/client-primitives.ts", "src/client-session-compat.ts", "src/image-composer.ts", "src/workspace-icons.tsx", "src/image-edit-reference.ts", "src/client-shared.ts", "src/client-types.ts", "src/capability-preferences.tsx", "src/image-preferences.tsx", "src/client-preferences.tsx", "src/client-diagnostics.tsx", "src/client-runtime-management.tsx", "src/client-section.tsx", "src/client-quota.tsx", "src/client-account.tsx", "src/client-usage.tsx", "src/sketch-interactions.ts", "src/sketch-agent-client.ts", "src/sketch-view.tsx", "src/sketch-files.tsx", "src/sketch-size-control.tsx", "src/sketch-layer-panel.tsx", "src/sketch-run-status.tsx", "src/sketch-tool-picker.tsx", "src/voice-controller.ts", "src/subscription-image-transform.ts", "src/sketch-trigger.ts", "src/client-model-select.tsx", "src/client-composer-quota.tsx", "src/client-voice.tsx", "src/subscription-image-viewer-overlay.tsx", "src/client-images.tsx", "src/client-image-previews.tsx", "src/sketch-studio.tsx", "src/sketch-workspace.tsx", "src/image-workspace.tsx", "src/client.tsx"]
+}

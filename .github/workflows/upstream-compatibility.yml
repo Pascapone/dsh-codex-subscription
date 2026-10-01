@@ -59,7 +59,7 @@ jobs:
             pnpm view @deepseek-ai/dsh versions --json > "$RUNNER_TEMP/dsh-versions.json"
             mapfile -t candidates < <(node --input-type=module -e '
               import { readFileSync } from "node:fs";
-              import { compareVersions } from "./scripts/prepare-compat-release.mjs";
+              import { compareVersions } from "./scripts/prepare-compat-release.mts";
               const compatibility = JSON.parse(readFileSync(process.argv[2], "utf8"));
               const current = compatibility.latestTested;
               const tested = new Set([...(compatibility.supported ?? []), ...(compatibility.previews ?? [])]);
@@ -104,10 +104,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/prepare-compat-release.mjs --dsh-version "$DSH_VERSION" > "$RUNNER_TEMP/update.json"
+          node --experimental-strip-types scripts/prepare-compat-release.mts --dsh-version "$DSH_VERSION" > "$RUNNER_TEMP/update.json"
           echo "plugin_version=$(jq -r '.pluginVersion' "$RUNNER_TEMP/update.json")" >> "$GITHUB_OUTPUT"
           pnpm --config.minimum-release-age=0 install --lockfile-only
-          node scripts/prepare-compat-release.mjs --refresh-release-age
+          node --experimental-strip-types scripts/prepare-compat-release.mts --refresh-release-age
           pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Verify source, build, and package
@@ -149,9 +149,9 @@ jobs:
       - name: Recreate candidate
         shell: powershell
         run: |
-          node scripts/prepare-compat-release.mjs --dsh-version '${{ needs.prepare.outputs.dsh_version }}'
+          node --experimental-strip-types scripts/prepare-compat-release.mts --dsh-version '${{ needs.prepare.outputs.dsh_version }}'
           pnpm --config.minimum-release-age=0 install --lockfile-only
-          node scripts/prepare-compat-release.mjs --refresh-release-age
+          node --experimental-strip-types scripts/prepare-compat-release.mts --refresh-release-age
           pnpm install --frozen-lockfile --ignore-scripts
           pnpm run build
           New-Item -ItemType Directory -Path .candidate | Out-Null
@@ -160,7 +160,7 @@ jobs:
         shell: powershell
         env:
           DSH_CODEX_TEST_USER_PATH: '1'
-        run: node --test tests/powershell-manager.test.mjs
+        run: node --experimental-strip-types --test tests/powershell-manager.test.mts
       - name: Accept install, update, Web startup, and uninstall in official DSH
         shell: powershell
         run: |
@@ -200,9 +200,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/prepare-compat-release.mjs --dsh-version "$DSH_VERSION"
+          node --experimental-strip-types scripts/prepare-compat-release.mts --dsh-version "$DSH_VERSION"
           pnpm --config.minimum-release-age=0 install --lockfile-only
-          node scripts/prepare-compat-release.mjs --refresh-release-age
+          node --experimental-strip-types scripts/prepare-compat-release.mts --refresh-release-age
           pnpm install --frozen-lockfile --ignore-scripts
           pnpm test
           pnpm run build

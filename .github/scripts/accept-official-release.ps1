@@ -9,6 +9,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $package = (Resolve-Path -LiteralPath $PackagePath).Path
+$sourceRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../..')).Path
+Push-Location -LiteralPath $sourceRoot
+try {
+    & node --experimental-strip-types (Join-Path $sourceRoot 'build.ts') --test
+    if ($LASTEXITCODE -ne 0) { throw 'Strict compiled acceptance fixtures failed to stage.' }
+} finally { Pop-Location }
+$compiledScripts = Join-Path $sourceRoot '.test-build/.github/scripts'
 $acceptanceRoot = Join-Path ([IO.Path]::GetTempPath()) ('dsh-codex-official-' + [Guid]::NewGuid().ToString('N'))
 $previousDshHome = $env:DSH_HOME
 $env:DSH_HOME = Join-Path $acceptanceRoot 'dsh-home'
@@ -29,7 +36,7 @@ function Initialize-Runner {
     $runnerRoot = Join-Path $acceptanceRoot 'runner'
     New-Item -ItemType Directory -Path $runnerRoot | Out-Null
     [IO.File]::WriteAllText((Join-Path $runnerRoot 'package.json'), '{"private":true}')
-    & node (Join-Path $PSScriptRoot 'pin-official-cohort.mjs') $runnerRoot $DshVersion
+    & node (Join-Path $compiledScripts 'pin-official-cohort.mjs') $runnerRoot $DshVersion
     if ($LASTEXITCODE -ne 0) { throw 'Official DSH cohort pinning failed.' }
     # The isolated CI checkout intentionally has no development node_modules.
     # Materialize the one test-only browser storage emulator beside the runner.
@@ -59,7 +66,7 @@ function Initialize-Runner {
     $script:runner = Get-Command (Join-Path $runnerRoot 'node_modules\.bin\dsh.cmd') `
         -CommandType Application -ErrorAction Stop
     $script:runnerPrefix = @()
-    & node (Join-Path $PSScriptRoot 'test-official-runtime.mjs') $runnerRoot
+    & node (Join-Path $compiledScripts 'test-official-runtime.mjs') $runnerRoot
     if ($LASTEXITCODE -ne 0) { throw 'Subscription behavior failed against official DSH dependencies.' }
 }
 
@@ -67,14 +74,14 @@ function Invoke-Dsh {
     param([Parameter(Mandatory = $true)][string[]] $Arguments)
 
     Write-Host "Official DSH: $($Arguments -join ' ')"
-    & node (Join-Path $PSScriptRoot 'run-official-cli.mjs') $runner.Source @runnerPrefix @Arguments
+    & node (Join-Path $compiledScripts 'run-official-cli.mjs') $runner.Source @runnerPrefix @Arguments
     if ($LASTEXITCODE -ne 0) {
         throw "Official DSH command failed with exit code $LASTEXITCODE."
     }
 }
 
 function Get-PluginList {
-    $output = & $runner.Source @runnerPrefix plugin --profile $Profile list dsh-codex-subscription --depth 0 2>&1 |
+    $output = & $runner.Source @runnerPrefix plugin --profile $Profile list @pascapone/dsh-codex-subscription --depth 0 2>&1 |
         Out-String
     if ($LASTEXITCODE -ne 0) { throw 'Official DSH plugin list failed.' }
     return $output
@@ -149,14 +156,14 @@ function Start-And-ProbeWeb {
 
 try {
     Initialize-Runner
-    $latest = (& pnpm view dsh-codex-subscription dist-tags.latest --json 2>$null | Out-String).Trim().Trim('"')
+    $latest = (& pnpm view @pascapone/dsh-codex-subscription dist-tags.latest --json 2>$null | Out-String).Trim().Trim('"')
     if ($LASTEXITCODE -eq 0 -and $latest -match '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
-        $publishedPeersJson = (& pnpm view "dsh-codex-subscription@$latest" peerDependencies --json 2>$null | Out-String).Trim()
+        $publishedPeersJson = (& pnpm view "@pascapone/dsh-codex-subscription@$latest" peerDependencies --json 2>$null | Out-String).Trim()
         $publishedHostRange = if ($LASTEXITCODE -eq 0 -and $publishedPeersJson) {
             try { (ConvertFrom-Json $publishedPeersJson).'@deepseek-ai/dsh-web' } catch { $null }
         }
         if ($publishedHostRange -and (@($publishedHostRange -split '\s*\|\|\s*') -contains $DshVersion)) {
-            Invoke-Dsh @('plugin', '--profile', $Profile, 'add', "dsh-codex-subscription@$latest", '--reporter', 'append-only')
+            Invoke-Dsh @('plugin', '--profile', $Profile, 'add', "@pascapone/dsh-codex-subscription@$latest", '--reporter', 'append-only')
         } else {
             Write-Host "Skipping predecessor ${latest}: it does not declare DSH $DshVersion compatibility."
         }
@@ -166,7 +173,7 @@ try {
     Assert-InstalledOnce
     Start-And-ProbeWeb
 
-    Invoke-Dsh @('plugin', '--profile', $Profile, 'remove', 'dsh-codex-subscription', '--reporter', 'append-only')
+    Invoke-Dsh @('plugin', '--profile', $Profile, 'remove', '@pascapone/dsh-codex-subscription', '--reporter', 'append-only')
     Assert-Removed
 
     Invoke-Dsh @('plugin', '--profile', $Profile, 'add', $package, '--reporter', 'append-only')

@@ -30,19 +30,19 @@ if ($Managed -and -not $PSBoundParameters.ContainsKey('Action')) {
     exit 0
 }
 
-$PackageName = 'dsh-codex-subscription'
+$PackageName = '@pascapone/dsh-codex-subscription'
 $LegacyPackageName = '@wsl043/dsh-codex-subscription'
 $ManagerScriptName = 'dsh-codex-manager.ps1'
 $LegacyManagerScriptName = 'dsh-codex.ps1'
 $ManagerShimName = 'dsh-codex.cmd'
 $ManagerStateName = 'install-state.json'
 $PackageVersion = '2.2.1'
-$PackageSpec = 'dsh-codex-subscription@2.2.1'
+$PackageSpec = '@pascapone/dsh-codex-subscription@2.2.1'
 $PnpmVersion = '11.26.0'
 $PnpmUrl = 'https://registry.npmjs.org/pnpm/-/pnpm-11.26.0.tgz'
 $PnpmSha512 = 'FC0E2BF890B9F983611F1AB68C0637BCE914390653699F83C1A78B005ED25F2C81E77920C8FD8EEE2ECF0B58B28CDCB00A84D97F69BCF7C56B2F344710238664'
-$ReleaseApi = if ($env:DSH_CODEX_RELEASE_API) { $env:DSH_CODEX_RELEASE_API } else { 'https://api.github.com/repos/WSL043/dsh-codex-subscription/releases/latest' }
-$ReleaseBase = if ($env:DSH_CODEX_RELEASE_BASE) { $env:DSH_CODEX_RELEASE_BASE.TrimEnd('/') } else { 'https://github.com/WSL043/dsh-codex-subscription/releases/download' }
+$ReleaseApi = if ($env:DSH_CODEX_RELEASE_API) { $env:DSH_CODEX_RELEASE_API } else { 'https://api.github.com/repos/Pascapone/dsh-codex-subscription/releases/latest' }
+$ReleaseBase = if ($env:DSH_CODEX_RELEASE_BASE) { $env:DSH_CODEX_RELEASE_BASE.TrimEnd('/') } else { 'https://github.com/Pascapone/dsh-codex-subscription/releases/download' }
 
 function Get-FileDigest {
     param(
@@ -871,7 +871,7 @@ try {
     $installedBefore = @(Get-InstalledPackages -Target $target)
     $installedBeforeNames = @($installedBefore | ForEach-Object { $_.Name })
     $hadPackage = $installedBeforeNames -contains $PackageName
-    $hadLegacyPackage = $installedBeforeNames -contains $LegacyPackageName
+    $legacyBefore = @($installedBeforeNames | Where-Object { $_ -in @($LegacyPackageName, 'dsh-codex-subscription') })
 
     if ($Action -eq 'Uninstall') {
         if ($hadPackage) {
@@ -879,17 +879,17 @@ try {
                 Get-ActionArguments -SelectedAction 'Uninstall' -Store $pnpmStore -SelectedPackage $PackageName
             )
         }
-        if ($hadLegacyPackage) {
+        foreach ($legacyPackage in $legacyBefore) {
             Invoke-DshCommand -Target $target -Arguments (
-                Get-ActionArguments -SelectedAction 'Uninstall' -Store $pnpmStore -SelectedPackage $LegacyPackageName
+                Get-ActionArguments -SelectedAction 'Uninstall' -Store $pnpmStore -SelectedPackage $legacyPackage
             )
         }
     } else {
         Invoke-DshCommand -Target $target -Arguments $actionArguments
-        if ($hadLegacyPackage) {
+        foreach ($legacyPackage in $legacyBefore) {
             try {
                 Invoke-DshCommand -Target $target -Arguments (
-                    Get-ActionArguments -SelectedAction 'Uninstall' -Store $pnpmStore -SelectedPackage $LegacyPackageName
+                    Get-ActionArguments -SelectedAction 'Uninstall' -Store $pnpmStore -SelectedPackage $legacyPackage
                 )
             } catch {
                 if (-not $hadPackage) {
@@ -912,7 +912,7 @@ try {
     $installedAfter = @(Get-InstalledPackages -Target $target)
     $installedAfterNames = @($installedAfter | ForEach-Object { $_.Name })
     if ($Action -eq 'Uninstall') {
-        if (($installedAfterNames -contains $PackageName) -or ($installedAfterNames -contains $LegacyPackageName)) {
+        if (@($installedAfterNames | Where-Object { $_ -in @($PackageName, $LegacyPackageName, 'dsh-codex-subscription') }).Count) {
             throw 'The plugin package is still present after uninstall.'
         }
         if ($entryCount -ne 0 -or $legacyEntryCount -ne 0) {
@@ -931,7 +931,7 @@ try {
             $foundVersion = if ($installedPackage[0].Version) { $installedPackage[0].Version } else { 'unknown' }
             throw "DSH did not install the requested package version: expected $PackageVersion, found $foundVersion."
         }
-        if ($installedAfterNames -contains $LegacyPackageName) { throw 'The legacy package is still present after migration.' }
+        if (@($installedAfterNames | Where-Object { $_ -in @($LegacyPackageName, 'dsh-codex-subscription') }).Count) { throw 'The legacy package is still present after migration.' }
         if ($entryCount -ne 1) { throw "Expected one plugin profile entry, found $entryCount." }
         if ($legacyEntryCount -ne 0) { throw 'The legacy plugin profile entry is still present after migration.' }
         $addedPath = Install-ManagerCommand -Directory $managerCommandRoot

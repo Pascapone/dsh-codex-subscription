@@ -1,0 +1,351 @@
+import type { CodexModel } from '../src/model-types.js';
+type FixtureTimer = {at: number; callback(): void; cleared: boolean};
+import assert from 'node:assert/strict'
+import test from 'node:test'
+
+import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
+
+import { CODEX_MODELS_URL, createOfficialModelCatalog, parseOfficialModelCatalog } from '../src/model-catalog.js'
+import { openaiCodexProvider, openaiCodexSubscriptionProvider } from '../src/pi-ai-runtime.js'
+import { contextModelGroups, supportsCodexFastMode } from '../src/settings-contract.js'
+import { DSH_MODEL_PROMPTS } from '../src/codex-base-prompts.js'
+
+const base: CodexModel[] = [{
+  id: 'gpt-base', name: 'GPT Base', api: 'openai-codex-responses', provider: 'openai-codex',
+  baseUrl: 'https://chatgpt.com/backend-api', reasoning: true, input: ['text'],
+  cost: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 }, contextWindow: 128_000, maxTokens: 128_000,
+}]
+
+test('offline catalog adds GPT-6 fallbacks without resurrecting retired Spark', () => {
+  const catalog = createOfficialModelCatalog()
+  const fallback = openaiCodexProvider().getModels()
+  const models = catalog.getModels(fallback)
+  assert.deepEqual(models.slice(0, 3).map(model => model.id), ['gpt-6-luna', 'gpt-6-sol', 'gpt-6.1-sol'])
+  assert.equal(models.some(model => model.id === 'gpt-5.3-codex-spark'), false)
+  assert.equal(models[2].contextWindow, 272_000)
+  assert.equal(models[2].maxContextWindow, 872_000)
+  assert.equal(supportsCodexFastMode('gpt-6.1-sol'), true)
+  assert.equal(models.some(model => model.id === 'gpt-5.5'), true)
+  assert.deepEqual(models[0].thinkingLevelMap, {
+    off: null, minimal: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max',
+  })
+  assert.equal(models[0].contextWindow, 272_000)
+  assert.equal(models[0].maxContextWindow, 872_000)
+  assert.equal(models[0].compat!.supportsAdditionalTools, true)
+})
+
+const remote = (overrides = {}) => ({
+  slug: 'gpt-next', display_name: 'GPT Next', description: 'Current account model',
+  supported_reasoning_levels: [{ effort: 'low', description: 'Low' }, { effort: 'max', description: 'Max' }],
+  visibility: 'list', supported_in_api: true, priority: 10, support_verbosity: true,
+  default_verbosity: 'medium', context_window: 400_000, input_modalities: ['text', 'image'],
+  service_tiers: [{ id: 'priority', name: 'Fast', description: 'Priority' }],
+  ...overrides,
+})
+
+test('unsupported catalog capabilities are diagnostic-only and follow catalog lifetime', async () => {
+  let unchanged = false
+  const catalog = createOfficialModelCatalog((({
+    baseModels: () => base,
+    getAuth: async () => ({ auth: { apiKey: 'test-token' } }),
+    readCredential: async () => ({ type: 'oauth', accountId: 'test-account' }),
+    fetch: async () => unchanged ? new Response(null, { status: 304 }) : Response.json({ models: [remote({
+      supported_reasoning_levels: [{ effort: 'max' }, { effort: 'ultra' }, { effort: 'private text' }],
+      input_modalities: ['text', 'image', 'audio', null],
+      additional_speed_tiers: ['fast', 'burst', 'https://private.invalid'],
+    })] }, { headers: { etag: 'revision-one' } }),
+  }) as unknown as NonNullable<Parameters<typeof createOfficialModelCatalog>[0]>))
+  await catalog.refresh()
+  const expected = [{ model: 'gpt-next', reasoning: ['ultra'], inputs: ['audio'], speeds: ['burst'] }]
+  assert.deepEqual(catalog.capabilityGaps(), expected)
+  const [model] = catalog.getModels([])
+  assert.deepEqual(model.input, ['text', 'image'])
+  assert.equal((model.thinkingLevelMap as Record<string, unknown>).ultra, undefined)
+  assert.equal((model as typeof model & {unsupported?: unknown}).unsupported, undefined)
+  const copy = catalog.capabilityGaps()
+  copy[0].inputs!.push('video')
+  assert.deepEqual(catalog.capabilityGaps(), expected)
+  unchanged = true
+  await catalog.refresh()
+  assert.deepEqual(catalog.capabilityGaps(), expected)
+  catalog.clear()
+  assert.deepEqual(catalog.capabilityGaps(), [])
+})
+
+test('official model catalog filters hidden entries and preserves advertised capabilities', () => {
+  const models = parseOfficialModelCatalog({ models: [
+    remote(),
+    remote({ slug: 'hidden', visibility: 'hide' }),
+  ] })
+  assert.equal(models.length, 1)
+  assert.deepEqual(models[0], {
+    id: 'gpt-next', name: 'GPT Next', description: 'Current account model', priority: 10,
+    input: ['text', 'image'], contextWindow: 400_000, reasoning: true,
+    thinkingLevelMap: { off: null, minimal: null, low: 'low', medium: null, high: null, xhigh: null, max: 'max' },
+    supportVerbosity: true, defaultVerbosity: 'medium', supportsFast: true,
+  })
+})
+
+test('reviewed DSH prompts cannot be replaced by catalog refresh, failure or account changes', async () => {
+  let fail = false
+  const catalog = createOfficialModelCatalog((({
+    baseModels: () => base,
+    getAuth: async () => ({ auth: { apiKey: 'test-token' } }),
+    readCredential: async () => ({ type: 'oauth', accountId: 'test-account' }),
+    fetch: async () => {
+      if (fail) throw new Error('offline')
+      return Response.json({ models: [...Object.keys(DSH_MODEL_PROMPTS), 'gpt-next'].map(slug => remote({
+        slug, context_window: 500_000,
+        model_messages: { instructions_template: 'Unreviewed remote instructions', persistent_instructions: 'Remote persistent mode' },
+        base_instructions: 'Legacy remote instructions',
+      })) })
+    },
+  }) as unknown as NonNullable<Parameters<typeof createOfficialModelCatalog>[0]>))
+  const checkPrompts = () => {
+    for (const [id, prompt] of Object.entries(DSH_MODEL_PROMPTS)) assert.equal(catalog.basePrompt(id), prompt)
+    for (const id of ['gpt-next', 'gpt-6-luna-preview', 'gpt-5.6-sol', 'other-model', '__proto__', 'constructor', undefined]) {
+      assert.equal(catalog.basePrompt(id as string), undefined)
+    }
+  }
+  checkPrompts()
+  await catalog.refresh()
+  checkPrompts()
+  assert.equal(catalog.getModels([])[0].contextWindow, 500_000, 'capability updates still work')
+  for (const id of Object.keys(DSH_MODEL_PROMPTS)) assert.equal((catalog.metadata(id)! as {instructionsTemplate?: unknown}).instructionsTemplate, undefined)
+  fail = true
+  await assert.rejects(catalog.refresh(), /offline/u)
+  checkPrompts()
+  catalog.clear()
+  checkPrompts()
+})
+
+test('ChatGPT catalog keeps picker-visible subscription models that are not API-key models', () => {
+  const models = parseOfficialModelCatalog({ models: [remote({
+    slug: 'gpt-5.3-codex-spark',
+    display_name: 'GPT-5.3-Codex-Spark',
+    supported_in_api: false,
+    input_modalities: ['text'],
+  })] })
+  assert.equal(models.length, 1)
+  assert.equal(models[0].id, 'gpt-5.3-codex-spark')
+})
+
+test('Reserve is a labeled last-choice experiment only when advertised by the account', () => {
+  const models = parseOfficialModelCatalog({ models: [
+    remote({ slug: 'gpt-reserve', visibility: 'hide', priority: 999, input_modalities: ['text'] }),
+    remote({ slug: 'other-hidden', visibility: 'hide' }),
+    remote(),
+  ] })
+  assert.deepEqual(models.map(model => model.id), ['gpt-next', 'gpt-reserve'])
+  assert.equal(models[1].name, 'GPT-Reserve (Experimental)')
+  assert.deepEqual(models[1].input, ['text'])
+  assert.equal(models[1].thinkingLevelMap.max, 'max')
+  assert.equal(parseOfficialModelCatalog({ models: [remote()] }).some(model => model.id === 'gpt-reserve'), false)
+  assert.equal(parseOfficialModelCatalog({ models: [remote({ slug: 'gpt-reserve', visibility: 'disabled' })] }).length, 0)
+})
+
+test('Astra from the official catalog reaches DSH with the selected context window', async () => {
+  const astraContext = { context_window: 272_000, max_context_window: 872_000 }
+  const catalog = createOfficialModelCatalog((({
+    baseModels: () => openaiCodexProvider().getModels(),
+    async getAuth() { return { auth: { apiKey: 'test-token' } } },
+    async readCredential() { return { type: 'oauth', accountId: 'test-account' } },
+    async fetch() {
+      return Response.json({ models: [remote({
+        slug: 'gpt-6-astra', display_name: 'GPT-6 Astra',
+        ...astraContext,
+      })] })
+    },
+  }) as unknown as NonNullable<Parameters<typeof createOfficialModelCatalog>[0]>))
+  await catalog.refresh()
+  let contextMode = 'standard'
+  const customWindows: Record<string, number> = {}
+  const provider = openaiCodexSubscriptionProvider((({
+    catalog,
+    resolveContextMode: () => contextMode,
+    resolveCustomContextWindow: (modelKey: string) => customWindows[modelKey],
+  }) as unknown as NonNullable<Parameters<typeof openaiCodexSubscriptionProvider>[0]>))
+  const adapter = new PiAiAdapter(({
+    profiles: () => new Map([['openai-codex', {
+      provider: 'openai-codex', displayName: 'ChatGPT subscription',
+      piProvider: provider, configuredMaxTokens: new Map(), modelErrors: new Map(),
+    }]]),
+    resolveApiKey: async () => { throw new Error('context resolution must not send a model request') },
+  } as unknown as ConstructorParameters<typeof PiAiAdapter>[0]))
+  const contextWindow = async () => (await adapter.resolveModel('openai-codex', 'gpt-6-astra'))!.context!.contextWindow
+  assert.equal(await contextWindow(), 272_000)
+  contextMode = 'extended'
+  assert.equal(await contextWindow(), 872_000)
+  contextMode = 'custom'
+  assert.equal(await contextWindow(), 272_000, 'an unset custom budget keeps the safe default')
+  for (const [requested, expected] of [[500_000, 500_000], [1_000_000, 872_000], [99, 128_000]]) {
+    customWindows['gpt-6-astra'] = requested
+    assert.equal(await contextWindow(), expected)
+  }
+  contextMode = 'standard'
+  assert.equal(await contextWindow(), 272_000, 'switching back must restore the unmodified catalog window')
+  assert.equal(catalog.getModels([])[0].contextWindow, 272_000)
+  Object.assign(astraContext, { context_window: 1_000_000, max_context_window: 1_000_000 })
+  await catalog.refresh()
+  assert.equal(await contextWindow(), 1_000_000, 'Standard must preserve even a newer catalog window')
+  contextMode = 'extended'
+  assert.equal(await contextWindow(), 1_000_000, 'Extended follows the new explicit official catalog maximum')
+})
+
+test('new Codex models appear from the account catalog with supported reasoning and context', async () => {
+  const catalog = createOfficialModelCatalog((({
+    baseModels: () => openaiCodexProvider().getModels(),
+    async getAuth() { return { auth: { apiKey: 'test-token' } } },
+    async readCredential() { return { type: 'oauth', accountId: 'test-account' } },
+    async fetch() {
+      return Response.json({ models: [
+        remote({ slug: 'gpt-6-sol', display_name: 'GPT-6-Sol', priority: 2,
+          context_window: 272_000, max_context_window: 872_000,
+          supported_reasoning_levels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'].map(effort => ({ effort })),
+        }),
+        remote({ slug: 'gpt-6.1-sol', display_name: 'GPT-6.1-Sol', priority: 1,
+          context_window: 272_000, max_context_window: 872_000,
+          supported_reasoning_levels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'].map(effort => ({ effort })),
+        }),
+        remote({ slug: 'gpt-6-luna', display_name: 'GPT-6-Luna', priority: 3,
+          context_window: 272_000, max_context_window: 872_000,
+          supported_reasoning_levels: ['low', 'medium', 'high', 'xhigh', 'max'].map(effort => ({ effort })),
+        }),
+      ] })
+    },
+  }) as unknown as NonNullable<Parameters<typeof createOfficialModelCatalog>[0]>))
+  await catalog.refresh()
+  let contextMode = 'standard'
+  const provider = openaiCodexSubscriptionProvider((({ catalog, resolveContextMode: () => contextMode }) as unknown as NonNullable<Parameters<typeof openaiCodexSubscriptionProvider>[0]>))
+  assert.equal(provider.getModels().find(model => model.id === 'gpt-6.1-sol')!.contextWindow, 272_000)
+  contextMode = 'extended'
+  assert.deepEqual(provider.getModels().map(model => [model.id, model.contextWindow]), [
+    ['gpt-6-luna', 872_000], ['gpt-6-sol', 872_000], ['gpt-6.1-sol', 872_000],
+  ])
+  assert.deepEqual(contextModelGroups(catalog.getModels([])).map(row => row.key), ['gpt-6-luna', 'gpt-6-sol', 'gpt-6.1-sol'])
+  assert.equal(catalog.metadata('gpt-6-luna')!.thinkingLevelMap.max, 'max')
+  assert.equal(catalog.metadata('gpt-6.1-sol')!.supportsFast, true)
+  assert.equal((catalog.metadata('gpt-6-sol')!.thinkingLevelMap as Record<string, unknown>).ultra, undefined)
+  assert.equal(catalog.metadata('gpt-6-sol')!.supportsFast, true)
+})
+
+test('catalog refresh is conditional, keeps the last good result, and never exposes credentials', async () => {
+  const requests: {input: string; headers: Headers}[] = []
+  let mode = 'fresh'
+  const catalog = createOfficialModelCatalog((({
+    baseModels: () => base,
+    async getAuth() { return { auth: { apiKey: 'secret-token' } } },
+    async readCredential() { return { type: 'oauth', accountId: 'secret-account' } },
+    async fetch(input: unknown, init: RequestInit) {
+      requests.push({ input: String(input), headers: new Headers(init.headers) })
+      if (mode === 'not-modified') return new Response(null, { status: 304 })
+      if (mode === 'failed') return new Response('{}', { status: 503 })
+      return new Response(JSON.stringify({ models: [remote()] }), { status: 200, headers: { etag: '"catalog-1"', 'content-type': 'application/json' } })
+    },
+  }) as unknown as NonNullable<Parameters<typeof createOfficialModelCatalog>[0]>))
+  assert.equal(await catalog.refresh(), true)
+  assert.equal(catalog.getModels(base)[0].id, 'gpt-next')
+  assert.equal(catalog.getModels(base)[0].cost.input, 0)
+  assert.equal(catalog.metadata('gpt-next')!.supportVerbosity, true)
+  assert.equal(catalog.revision(), 1)
+  assert.equal(requests[0].input, CODEX_MODELS_URL)
+  mode = 'not-modified'
+  assert.equal(await catalog.refresh(), false)
+  assert.equal(requests[1].headers.get('if-none-match'), '"catalog-1"')
+  mode = 'failed'
+  await assert.rejects(catalog.refresh(), /HTTP 503/u)
+  assert.equal(catalog.getModels(base)[0].id, 'gpt-next')
+  assert.doesNotMatch(JSON.stringify(catalog.getModels(base)), /secret-token|secret-account/u)
+})
+
+test('catalog timeout rejects even when an injected request ignores abort and drops its late result', async () => {
+  let resolveFetch!: (value: Response) => void
+  const catalog = createOfficialModelCatalog((({
+    baseModels: () => base,
+    timeoutMs: 10,
+    async getAuth() { return { auth: { apiKey: 'test-token' } } },
+    async readCredential() { return { type: 'oauth', accountId: 'test-account' } },
+    async fetch() {
+      return new Promise<Response>(resolve => { resolveFetch = resolve })
+    },
+  }) as unknown as NonNullable<Parameters<typeof createOfficialModelCatalog>[0]>))
+
+  await assert.rejects(catalog.refresh(), /timed out/u)
+  resolveFetch(Response.json({ models: [remote({ slug: 'late-model' })] }))
+  await new Promise<void>(resolve => setImmediate(resolve))
+  assert.equal(catalog.revision(), 0)
+  assert.deepEqual(catalog.getModels(base).map(model => model.id), ['gpt-6-luna', 'gpt-6-sol', 'gpt-6.1-sol', 'gpt-base'])
+})
+
+test('clear aborts the old flight without letting its timer invalidate the replacement', async () => {
+  const fetches: ((value: Response) => void)[] = []
+  const timers: FixtureTimer[] = []
+  let now = 0
+  const scheduleTimeout = (callback: () => void, delay: number) => {
+    const timer = { at: now + delay, callback, cleared: false }
+    timers.push(timer)
+    return timer
+  }
+  const cancelTimeout = (timer: FixtureTimer) => { timer.cleared = true }
+  const advanceTo = (target: number) => {
+    now = target
+    for (const timer of timers.filter(item => !item.cleared && item.at <= target)) {
+      timer.cleared = true
+      timer.callback()
+    }
+  }
+  const catalog = createOfficialModelCatalog((({
+    baseModels: () => base,
+    timeoutMs: 50,
+    setTimeout: scheduleTimeout,
+    clearTimeout: cancelTimeout,
+    async getAuth() { return { auth: { apiKey: 'test-token' } } },
+    async readCredential() { return { type: 'oauth', accountId: 'test-account' } },
+    async fetch() {
+      return new Promise<Response>(resolve => fetches.push(resolve))
+    },
+  }) as unknown as NonNullable<Parameters<typeof createOfficialModelCatalog>[0]>))
+
+  const old = catalog.refresh()
+  await Promise.resolve()
+  await Promise.resolve()
+  assert.equal(fetches.length, 1)
+  now = 10
+  catalog.clear()
+  await assert.rejects(old)
+  const replacement = catalog.refresh()
+  await Promise.resolve()
+  await Promise.resolve()
+  assert.equal(timers.length, 2)
+  assert.equal(timers[0].cleared, true)
+  advanceTo(50)
+  assert.equal(fetches.length, 2)
+  fetches[1](Response.json({ models: [remote({ slug: 'replacement-model' })] }))
+  assert.equal(await replacement, true)
+  fetches[0](Response.json({ models: [remote({ slug: 'late-old-model' })] }))
+  await new Promise<void>(resolve => setImmediate(resolve))
+  assert.equal(catalog.getModels(base)[0].id, 'replacement-model')
+})
+
+test('catalog support state distinguishes fallback, successful refresh, and retained online data after failure', async () => {
+  let fail = true
+  const catalog = createOfficialModelCatalog((({
+    baseModels: () => base,
+    getAuth: async () => ({ auth: { apiKey: 'test-token' } }),
+    readCredential: async () => ({ type: 'oauth', accountId: 'test-account' }),
+    fetch: async () => fail ? new Response('', { status: 403 }) : Response.json({ models: [remote()] }),
+  }) as unknown as NonNullable<Parameters<typeof createOfficialModelCatalog>[0]>))
+  assert.deepEqual(catalog.status(), { source: 'fallback', refresh: 'idle' })
+  const failed = catalog.refresh()
+  assert.equal(catalog.status().refresh, 'refreshing')
+  await assert.rejects(failed, /HTTP 403/)
+  assert.deepEqual(catalog.status(), { source: 'fallback', refresh: 'failed' })
+  fail = false
+  await catalog.refresh()
+  assert.deepEqual(catalog.status(), { source: 'online', refresh: 'ok' })
+  fail = true
+  await assert.rejects(catalog.refresh(), /HTTP 403/)
+  assert.deepEqual(catalog.status(), { source: 'online', refresh: 'failed' })
+  catalog.clear()
+  assert.deepEqual(catalog.status(), { source: 'fallback', refresh: 'idle' })
+})

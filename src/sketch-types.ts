@@ -1,0 +1,15 @@
+export type SketchPoint = { x: number; y: number };
+export type SketchStroke = { id?: string; shape?: string; points: SketchPoint[]; color: string; width: number; opacity?: number; fill?: boolean; text?: string; brush?: string; brushVersion?: number; pressure?: number };
+export type SketchImage = { src: string; x: number; y: number; width: number; height: number };
+export type SketchLayer = { id: number; name: string; visible: boolean; strokes: SketchStroke[]; image?: SketchImage };
+export type SketchDocument = { active: number; nextId: number; layers: SketchLayer[]; width?: number; height?: number; ratio?: string };
+export type SketchTransform = { dx?: number; dy?: number; scaleX?: number; scaleY?: number };
+export type SketchCommand = Partial<Omit<SketchStroke, 'id'>> & { op?: string; action?: string; id?: string | number; layer?: number; after?: number; value?: unknown; ratio?: string; start?: SketchPoint; segments?: { control1: SketchPoint; control2: SketchPoint; end: SketchPoint }[]; patch?: Partial<SketchStroke>; transform?: SketchTransform };
+export type SketchRequest = { action?: string; runId?: string; documentId?: string; revision?: number; requestId?: string; commands?: unknown; name?: string; offset?: number; objectId?: string; layer?: number };
+export type SketchSnapshot = { documentId: string; revision: number; [key: string]: unknown };
+export type SketchCommandAdapter = { available(): boolean; busy(): boolean; snapshot(): SketchSnapshot; document(): SketchDocument; commit(doc: SketchDocument): void; preview(): Promise<string>; save(name?: string): Promise<unknown>; objects?(): unknown[]; object?(id: string, layer?: number): unknown };
+export type SketchCommandResult = SketchSnapshot & { [key: string]: unknown };
+export type SketchDraft = { id: string; name: string; updated: number; doc: SketchDocument };
+export type SketchRecovery = Omit<SketchDraft, 'name'> & { name?: string };
+export type SketchDraftMetadata = Omit<SketchDraft, 'doc'> & { key: string; kind: string; size: number };
+export type SketchGesture = { layer: number; start?: SketchPoint; object?: SketchStroke; handle?: string; eraseStroke?: boolean; last?: SketchPoint; before?: SketchDocument; pointer?: number; changed?: boolean; moved?: boolean };

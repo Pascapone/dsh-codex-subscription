@@ -1,0 +1,51 @@
+type ExportOptions = Parameters<typeof exportSketchAgentFile>[1];
+type ExportFile = Awaited<ReturnType<ExportOptions['exportFile']>>;
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { exportSketchAgentFile } from '../src/sketch-agent-export.js'
+import { createSketchOperationGate } from '../src/sketch-operation-gate.js'
+
+const deferred = <T,>() => { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { promise, resolve } }
+
+test('agent export excludes concurrent export and file work through blob serialization', async () => {
+  const gate = createSketchOperationGate(), encoded = deferred<ExportFile>(), bytes = deferred<ArrayBuffer>(), states: boolean[] = []
+  const options: ExportOptions = { gate, working: (state: boolean) => states.push(state), report() {}, exportFile: () => encoded.promise }
+  const first = exportSketchAgentFile('psd', options)
+  assert.equal(gate.running, true)
+  await assert.rejects(exportSketchAgentFile('png', options), /being edited/)
+  assert.equal(await gate.run(() => assert.fail('manual operation must wait'), options), false)
+  assert.equal(gate.running, true)
+  encoded.resolve({ extension: 'psd', blob: { type: 'image/vnd.adobe.photoshop', arrayBuffer: () => bytes.promise } as unknown as Blob })
+  await Promise.resolve()
+  assert.equal(gate.running, true)
+  bytes.resolve(Uint8Array.from([0, 127, 128, 255]).buffer)
+  assert.deepEqual(await first, { extension: 'psd', mediaType: 'image/vnd.adobe.photoshop', base64: 'AH+A/w==' })
+  assert.equal(gate.running, false)
+  assert.deepEqual(states, [true, false])
+})
+
+test('failed codec and failed blob read preserve the cause and release the editor', async () => {
+  for (const stage of ['codec', 'blob']) {
+    const gate = createSketchOperationGate(), failure = Error(`${stage} failure`), errors: unknown[] = [], states: boolean[] = []
+    const options: ExportOptions = {
+      gate, working: (state: boolean) => states.push(state), report: (error: unknown) => errors.push(error),
+      exportFile: async () => {
+        if (stage === 'codec') throw failure
+        return { extension: 'png', blob: { arrayBuffer: async () => { throw failure } } as unknown as Blob }
+      }
+    }
+    await assert.rejects(exportSketchAgentFile('png', options), error => error === failure)
+    assert.equal(errors.at(-1), failure)
+    assert.equal(gate.running, false)
+    assert.deepEqual(states, [true, false])
+    options.exportFile = async () => ({ extension: 'png', blob: new Blob(['ok'], { type: 'image/png' }) })
+    assert.equal((await exportSketchAgentFile('png', options)).base64, 'b2s=')
+  }
+})
+
+test('busy editor rejects export without touching the codec or busy state', async () => {
+  await assert.rejects(exportSketchAgentFile('draft', {
+    gate: createSketchOperationGate(), blocked: true,
+    exportFile: () => assert.fail('codec started'), working: () => assert.fail('busy changed'), report() {}
+  }), /being edited/)
+})

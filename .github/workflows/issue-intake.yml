@@ -61,12 +61,12 @@ jobs:
             if (!/^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(value ?? '')) {
               await commentOnce(
                 '<!-- dsh-version-check:missing -->',
-                'Please edit the report and provide the exact plugin version from Settings or `dsh plugin --profile web list dsh-codex-subscription --depth 0`. If installation never completed, enter `not installed`.',
+                'Please edit the report and provide the exact plugin version from Settings or `dsh plugin --profile web list @pascapone/dsh-codex-subscription --depth 0`. If installation never completed, enter `not installed`.',
               )
               return
             }
 
-            const response = await fetch('https://registry.npmjs.org/dsh-codex-subscription/latest')
+            const response = await fetch('https://registry.npmjs.org/@pascapone%2fdsh-codex-subscription/latest')
             if (!response.ok) return
             const latest = String((await response.json()).version ?? '')
             const parts = version => version.replace(/^v/u, '').split(/[.-]/u).slice(0, 3).map(Number)

@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "ESNext.Disposable"],
+    "types": ["node"],
+    "noEmit": false,
+    "declaration": true,
+    "outDir": ".test-build",
+    "rootDir": "."
+  },
+  "include": ["src/model-catalog.ts", "src/usage.ts", "src/model-types.ts", "src/auth-types.ts", "src/external-url.ts", "src/account-vault.ts", "src/credential-store.ts", "src/login-coordinator.ts", "src/oauth-network.ts", "src/network-types.ts", "src/transport-failure.ts", "src/reset-credits.ts", "src/reset-types.ts", "src/subscription-connection.ts", "src/subscription-compaction.ts", "src/compaction-types.ts", "src/pi-ai-runtime.ts", "src/runtime-types.ts", "src/codex-transcription.ts", "src/quota-forecast.ts", "src/quota-forecast-store.ts", "src/image-original-store.ts", "src/subscription-transport.ts", "src/subagent-auth.ts", "src/subagent-runtime.ts", "src/runtime-management.ts", "src/subscription-rpc.ts", "src/settings-adapter.ts", "src/diagnostics.ts", "src/subagent-backend.ts", "src/image-tool-registration.ts", "src/codex-search.ts", "src/codex-images.ts", "src/sketch-agent-bridge.ts", "src/sketch-codec-route.ts", "src/sketch-command-schema.ts", "src/sketch-agent-tool.ts", "src/index.ts"]
+}
