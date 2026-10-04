@@ -297,10 +297,10 @@ test('plugin registers one Codex route, subscription image tool, and DSH-trusted
   assert.equal((await host.registered[0].adapter.resolveModel('openai-codex', 'gpt-5.5')!)!.context!.contextWindow, 272_000)
   await host.updateSettings({ [CONTEXT_MODE_FIELD]: CONTEXT_MODE_EXTENDED })
   assert.equal((await host.registered[0].adapter.resolveModel('openai-codex', 'gpt-5.5')!)!.context!.contextWindow, 1_000_000)
-  await host.updateSettings({ [CONTEXT_MODE_FIELD]: CONTEXT_MODE_CUSTOM, customContextGpt54Mini: 400_000, customContextGpt55: 500_000 })
-  assert.equal((await host.registered[0].adapter.resolveModel('openai-codex', 'gpt-5.4-mini')!)!.context!.contextWindow, 400_000)
+  await host.updateSettings({ [CONTEXT_MODE_FIELD]: CONTEXT_MODE_CUSTOM, customContextModels: { 'gpt-6-astra': 400_000 }, customContextGpt55: 500_000 })
+  assert.equal((await host.registered[0].adapter.resolveModel('openai-codex', 'gpt-6-astra')!)!.context!.contextWindow, 400_000)
   assert.equal((await host.registered[0].adapter.resolveModel('openai-codex', 'gpt-5.5')!)!.context!.contextWindow, 500_000)
-  await host.updateSettings({ [CONTEXT_MODE_FIELD]: CONTEXT_MODE_STANDARD, [CUSTOM_CONTEXT_WINDOW_FIELD]: 272_000, customContextGpt54: 272_000, customContextGpt54Mini: 272_000, customContextGpt55: 272_000, customContextGpt56: 272_000 })
+  await host.updateSettings({ [CONTEXT_MODE_FIELD]: CONTEXT_MODE_STANDARD, [CUSTOM_CONTEXT_WINDOW_FIELD]: 272_000, customContextModels: {}, customContextGpt54: 272_000, customContextGpt54Mini: 272_000, customContextGpt55: 272_000, customContextGpt56: 272_000 })
   assert.equal(host.handled.length, RPC_ENDPOINTS.length + 1)
   assert.equal(host.handled[0].path, '/api/codex-subscription/status')
   assert.ok(host.handled.filter(route => route.path !== '/api/codex-subscription/sketch-psd-worker').every(route => route.methods.length === 1 && route.methods[0] === 'POST'))
@@ -359,18 +359,20 @@ test('plugin registers one Codex route, subscription image tool, and DSH-trusted
 
   const preferenceStatus = await host.request('preferences/status', {}, signal)
   const activeContextModels = preferenceStatus.value.contextModels
-  assert.partialDeepStrictEqual(activeContextModels, [
-    { key: 'gpt-5.4', label: 'GPT-5.4', maximum: 1_000_000 },
-    { key: 'gpt-5.4-mini', label: 'GPT-5.4 mini', maximum: 400_000 },
+  assert.deepEqual(activeContextModels, [
+    { key: 'gpt-6.1-sol', label: 'GPT-6.1-Sol', maximum: 872_000, default: 272_000 },
     { key: 'gpt-5.5', label: 'GPT-5.5', maximum: 1_000_000 },
     { key: 'gpt-5.6', label: 'GPT-5.6 Luna / Sol / Terra', maximum: 1_000_000 },
+    { key: 'gpt-6-astra', label: 'GPT-6 Astra', maximum: 872_000 },
+    { key: 'gpt-6-luna', label: 'GPT-6 Luna', maximum: 272_000, default: 272_000 },
+    { key: 'gpt-6-sol', label: 'GPT-6 Sol', maximum: 272_000, default: 272_000 },
   ])
   for (const model of activeContextModels) {
     assert.equal(typeof model.label, 'string')
     assert.ok(model.maximum > 0 && model.maximum <= 1_000_000)
   }
   const verbosityModels = preferenceStatus.value.verbosityModels
-  assert.partialDeepStrictEqual(verbosityModels, ['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.5', 'gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra'])
+  assert.deepEqual(verbosityModels, ['gpt-6.1-sol', 'gpt-5.5', 'gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'gpt-6-luna', 'gpt-6-sol'])
   assert.equal(verbosityModels.includes('gpt-5.3-codex-spark'), false)
   assert.equal(typeof preferenceStatus.value.subagentRuntimeInstalled, 'boolean')
   assert.deepEqual(preferenceStatus, {

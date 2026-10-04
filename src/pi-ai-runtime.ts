@@ -1,4 +1,4 @@
-import type { ApiKeyAuth, AssistantMessageEvent, AssistantMessageEventStream, Provider, Context as PiContext, StreamOptions, OpenAICodexResponsesOptions, SimpleStreamOptions } from '@earendil-works/pi-ai';
+import type { ApiKeyAuth, AssistantMessageEvent, AssistantMessageEventStream, Provider, StreamOptions, OpenAICodexResponsesOptions, SimpleStreamOptions } from '@earendil-works/pi-ai';
 import type { SubscriptionProviderOptions } from './runtime-types.js';
 import type { CodexModel } from './model-types.js';
 import type { CodexPayload } from './compaction-types.js';
@@ -18,6 +18,8 @@ import {
   modelContextMaximum,
   clampModelContext,
 } from './settings-contract.js'
+
+type PiContext = Parameters<Provider<'openai-codex-responses'>['stream']>[1]
 
 const FAST_SERVICE_TIER = 'priority'
 
@@ -140,4 +142,4 @@ export function openaiCodexSubscriptionProvider({
   })
 }
 
-export const PI_AI_RUNTIME_VERSIONS = Object.freeze(['0.82.1', '0.85.1'])
+export const PI_AI_RUNTIME_VERSIONS = Object.freeze(['0.82.1', '0.85.1', '0.87.1'])

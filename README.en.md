@@ -22,7 +22,7 @@ No OpenAI API key or Codex CLI. Models, search, quota, and image generation stay
   <img src="docs/assets/codex-subscription-overview-en.webp" width="900" alt="Use ChatGPT and Codex subscriptions in DeepSeek Harness: sign in without an API key, choose models and view remaining quota">
 </p>
 
-Compatible with DSH `0.1.7-rc.2` plugin compatibility checks and settings APIs, while retaining support for previously supported versions.
+Compatible with DSH `0.1.7-rc.2` and the `0.2.1-alpha.1` preview, while retaining previously supported versions. The preview uses Pi `0.87.1`; the provider forwards its normalized transcript context without rebuilding the prompt or tools.
 
 ## Three-step start
 

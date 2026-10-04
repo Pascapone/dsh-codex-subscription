@@ -3,6 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { WebSocketServer } from 'ws'
+import { normalizeContext } from '@earendil-works/pi-ai'
 import { createSubscriptionConnection } from '../src/subscription-connection.js'
 import { openaiCodexSubscriptionProvider } from '../src/pi-ai-runtime.js'
 import { createCodexNetworkTransport, withCodexNetwork } from '../src/oauth-network.js'
@@ -66,7 +67,7 @@ test('a trusted request-local route preserves Codex OAuth and leaves the shared 
   })
   const model = provider.getModels().find(value => value.id === 'gpt-5.6-luna')!
   const originalBaseUrl = model.baseUrl
-  const context: Parameters<typeof provider.stream>[1] = { messages: [{ role: 'user', content: 'test', timestamp: Date.now() }] }
+  const context = normalizeContext({ messages: [{ role: 'user', content: 'test', timestamp: Date.now() }] })
   const send = async (method: 'stream' | 'streamSimple') => { for await (const _event of provider[method](model, context, { apiKey, sessionId: 'same' })) {} }
   try {
     await send('stream'); await send('streamSimple')
@@ -127,7 +128,7 @@ test('a rejected WebSocket proxy CONNECT falls back through the existing SSE rou
   const apiKey = `e30.${Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'fixture' } })).toString('base64url')}.fake`
   try {
     const model = provider.getModels().find(model => model.id === 'gpt-5.6-luna')!
-    const stream = provider.streamSimple(model, { messages: [{ role: 'user', content: 'test', timestamp: Date.now() }] }, { apiKey, sessionId: 'proxy-failure', signal: AbortSignal.timeout(5000) })
+    const stream = provider.streamSimple(model, normalizeContext({ messages: [{ role: 'user', content: 'test', timestamp: Date.now() }] }), { apiKey, sessionId: 'proxy-failure', signal: AbortSignal.timeout(5000) })
     const events = []
     for await (const event of stream) events.push(event.type)
     assert.ok(events.includes('done'), events.join(','))
@@ -161,7 +162,7 @@ test('a disconnect after response acceptance is surfaced without replaying the r
   try {
     const model = provider.getModels().find(model => model.id === 'gpt-5.6-luna')!
     const events=[]
-    for await(const event of provider.streamSimple(model,{messages:[{role:'user',content:'fixture',timestamp:Date.now()}]},{apiKey,sessionId:'interrupted',signal:AbortSignal.timeout(3000)})) events.push(event)
+    for await(const event of provider.streamSimple(model,normalizeContext({messages:[{role:'user',content:'fixture',timestamp:Date.now()}]}),{apiKey,sessionId:'interrupted',signal:AbortSignal.timeout(3000)})) events.push(event)
     assert.ok(events.some(event => event.type === 'start'))
     const failure = events.find(event => event.type === 'error')
     assert.match(failure?.error.errorMessage!, /^Network transport failure: WebSocket closed 1006/)

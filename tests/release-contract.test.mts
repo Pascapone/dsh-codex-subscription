@@ -14,14 +14,15 @@ const pngDimensions = (path: string) => {
 }
 const manifest = JSON.parse(text('package.json')) as TestManifest
 const compatibility = JSON.parse(text('compatibility.json')) as TestCompatibility
+const developmentDshVersion = '0.2.1-alpha.1'
 
 test('normal installation does not pull the optional Codex executable runtime', () => {
   const runtime = '@deepseek-ai/dsh-subagent-codex'
   assert.equal(manifest.dependencies?.[runtime], undefined)
   assert.equal(manifest.optionalDependencies?.[runtime], undefined)
   assert.equal(manifest.peerDependenciesMeta?.[runtime]?.optional, true)
-  assert.equal(manifest.peerDependencies[runtime], '0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.7-rc.1 || 0.1.7-rc.2')
-  assert.equal(manifest.devDependencies[runtime], '0.1.7-rc.2')
+  assert.equal(manifest.peerDependencies[runtime], `0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.7-rc.1 || 0.1.7-rc.2 || ${developmentDshVersion}`)
+  assert.equal(manifest.devDependencies[runtime], developmentDshVersion)
 })
 
 test('scheduled compatibility checks cannot commit or release merely because upstream changed', () => {
@@ -77,19 +78,20 @@ test('release is a prebuilt, documented, removable DSH bundle', () => {
   for (const [name, version] of Object.entries(pkg.peerDependencies)) {
     if (name.startsWith('@deepseek-ai/dsh-') && !pkg.peerDependenciesMeta?.[name]?.optional) assert.deepEqual(new Set(version.split(' || ')), supportedDshReleases, name)
   }
-  assert.equal(pkg.devDependencies['@deepseek-ai/dsh-llm-pi-ai'], compatibility.latestTested)
-  assert.equal(pkg.dependencies['@deepseek-ai/dsh-home-paths'], compatibility.latestTested)
-  assert.equal(pkg.devDependencies['@deepseek-ai/dsh-api-remotes'], compatibility.latestTested)
-  assert.equal(pkg.devDependencies['@deepseek-ai/dsh-invariants'], compatibility.latestTested)
+  assert.ok(compatibility.previews.includes(developmentDshVersion))
+  assert.equal(pkg.devDependencies['@deepseek-ai/dsh-llm-pi-ai'], developmentDshVersion)
+  assert.equal(pkg.dependencies['@deepseek-ai/dsh-home-paths'], developmentDshVersion)
+  assert.equal(pkg.devDependencies['@deepseek-ai/dsh-api-remotes'], developmentDshVersion)
+  assert.equal(pkg.devDependencies['@deepseek-ai/dsh-invariants'], undefined)
   assert.equal(pkg.devDependencies['@deepseek-ai/dsh-client-ui-attachment'], undefined)
   assert.equal(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-client-runtime'), false)
   assert.equal(pkg.peerDependencies['@deepseek-ai/dsh-client-runtime'], undefined)
   assert.equal(pkg.devDependencies['@deepseek-ai/dsh-client-runtime'], undefined)
   assert.equal(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-api-remotes'), true)
-  assert.equal(pkg.devDependencies['@deepseek-ai/cordis'], '4.0.4')
-  assert.equal(pkg.devDependencies['@deepseek-ai/schemastery'], '3.18.4')
-  assert.equal(pkg.peerDependencies['@deepseek-ai/schemastery'], '3.18.1 || ^3.18.2')
-  assert.equal(pkg.peerDependencies['@earendil-works/pi-ai'], '0.82.1 || 0.85.1')
+  assert.equal(pkg.devDependencies['@deepseek-ai/cordis'], '4.0.5-alpha.1')
+  assert.equal(pkg.devDependencies['@deepseek-ai/schemastery'], '3.18.5-alpha.1')
+  assert.equal(pkg.peerDependencies['@deepseek-ai/schemastery'], '3.18.1 || ^3.18.2 || 3.18.5-alpha.1')
+  assert.equal(pkg.peerDependencies['@earendil-works/pi-ai'], '0.82.1 || 0.85.1 || 0.87.1')
   assert.equal(pkg.packageManager, 'pnpm@11.26.0')
   assert.equal(existsSync(new URL('../lib/index.js', import.meta.url)), true)
   assert.equal(existsSync(new URL('../lib/client.js', import.meta.url)), true)

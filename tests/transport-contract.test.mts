@@ -1,4 +1,4 @@
-import type { AssistantMessage } from '@earendil-works/pi-ai';
+import { normalizeContext, type AssistantMessage } from '@earendil-works/pi-ai';
 type FixtureWire = {store: boolean; prompt_cache_key: string; include: string[]; instructions: string; service_tier?: string; text: {verbosity: string}};
 import assert from 'node:assert/strict'
 import test from 'node:test'
@@ -54,10 +54,10 @@ test('pi-ai Codex wire keeps a stable cache key, stateless storage, and server c
     const model = provider.getModels().find(model => model.id === 'gpt-5.6-luna')
     assert.ok(model)
     let final!: AssistantMessage
-    for await (const event of provider.streamSimple(model, {
+    for await (const event of provider.streamSimple(model, normalizeContext({
       systemPrompt: 'Stable prefix',
       messages: [{ role: 'user', content: 'hello', timestamp: 1 }],
-    }, {
+    }), {
       apiKey: jwt('account-1'),
       sessionId: 'session-stable',
       cacheRetention: 'short',
@@ -321,8 +321,8 @@ test('context presets preserve catalog defaults and cap every supported model in
 
   assert.partialDeepStrictEqual(contexts(), {
     'gpt-5.3-codex-spark': 128_000,
-    'gpt-5.4': 272_000,
-    'gpt-5.4-mini': 272_000,
+    'gpt-6-sol': 272_000,
+    'gpt-6-luna': 272_000,
     'gpt-5.5': 272_000,
     'gpt-5.6-luna': 272_000,
     'gpt-5.6-sol': 272_000,
@@ -333,8 +333,8 @@ test('context presets preserve catalog defaults and cap every supported model in
   contextMode = CONTEXT_MODE_EXTENDED
   assert.partialDeepStrictEqual(contexts(), {
     'gpt-5.3-codex-spark': 128_000,
-    'gpt-5.4': 1_000_000,
-    'gpt-5.4-mini': 400_000,
+    'gpt-6-sol': 272_000,
+    'gpt-6-luna': 272_000,
     'gpt-5.5': 1_000_000,
     'gpt-5.6-luna': 1_000_000,
     'gpt-5.6-sol': 1_000_000,
@@ -343,12 +343,12 @@ test('context presets preserve catalog defaults and cap every supported model in
 
   if ('gpt-6-astra' in contexts()) assert.equal(contexts()['gpt-6-astra'], 872_000)
   contextMode = CONTEXT_MODE_CUSTOM
-  perModel.set('gpt-5.4-mini', 300_000)
+  perModel.set('gpt-6-luna', 300_000)
   perModel.set('gpt-5.6', 750_000)
   assert.partialDeepStrictEqual(contexts(), {
     'gpt-5.3-codex-spark': 128_000,
-    'gpt-5.4': 500_000,
-    'gpt-5.4-mini': 300_000,
+    'gpt-6-sol': 272_000,
+    'gpt-6-luna': 272_000,
     'gpt-5.5': 500_000,
     'gpt-5.6-luna': 750_000,
     'gpt-5.6-sol': 750_000,
@@ -357,7 +357,7 @@ test('context presets preserve catalog defaults and cap every supported model in
 
   if ('gpt-6-astra' in contexts()) assert.equal(contexts()['gpt-6-astra'], 500_000)
   customContextWindow = 64_000
-  assert.equal(contexts()['gpt-5.4'], 128_000)
-  perModel.set('gpt-5.4-mini', 200_000)
-  assert.equal(contexts()['gpt-5.4-mini'], 200_000)
+  assert.equal(contexts()['gpt-6-sol'], 128_000)
+  perModel.set('gpt-6-luna', 200_000)
+  assert.equal(contexts()['gpt-6-luna'], 200_000)
 })

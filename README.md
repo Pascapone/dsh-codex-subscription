@@ -23,7 +23,7 @@
   <img src="docs/assets/codex-subscription-overview.webp" width="900" alt="在 DeepSeek Harness 登录 ChatGPT 并使用 Codex 订阅：无需 API Key，支持模型选择和剩余额度显示">
 </p>
 
-已适配 DSH `0.1.7-rc.2` 的插件兼容性检查与设置接口，同时保留已支持版本的兼容。
+兼容 DSH `0.1.7-rc.2` 与 `0.2.1-alpha.1` 预览版，同时保留已支持版本的兼容。预览版使用 Pi `0.87.1`；provider 原样转发其规范化的转录上下文，不重新构建提示词或工具。
 
 ## 三步开始
 

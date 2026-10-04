@@ -1,5 +1,8 @@
 import * as primitives from '@deepseek-ai/dsh-client-ui-primitives';
-export declare const Input: typeof primitives.Input;
+export declare const Input: import("react").ForwardRefExoticComponent<{
+    icon?: import("react").ReactNode;
+    className?: string;
+} & import("react").InputHTMLAttributes<HTMLInputElement> & import("react").RefAttributes<HTMLInputElement>>;
 export declare const Button: import("react").ForwardRefExoticComponent<{
     variant?: primitives.ButtonVariant;
     size?: "md" | "sm";

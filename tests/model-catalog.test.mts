@@ -18,8 +18,10 @@ const base: CodexModel[] = [{
 
 test('offline catalog adds GPT-6 fallbacks without resurrecting retired Spark', () => {
   const catalog = createOfficialModelCatalog()
-  const fallback = openaiCodexProvider().getModels()
+  const native = openaiCodexProvider().getModels()
+  const fallback = native.filter(model => !['gpt-6-luna', 'gpt-6-sol', 'gpt-6.1-sol'].includes(model.id))
   const models = catalog.getModels(fallback)
+  assert.deepEqual(catalog.getModels(native).find(model => model.id === 'gpt-6-luna'), native.find(model => model.id === 'gpt-6-luna'))
   assert.deepEqual(models.slice(0, 3).map(model => model.id), ['gpt-6-luna', 'gpt-6-sol', 'gpt-6.1-sol'])
   assert.equal(models.some(model => model.id === 'gpt-5.3-codex-spark'), false)
   assert.equal(models[2].contextWindow, 272_000)
