@@ -724,7 +724,12 @@ function Get-CimInstance {
     @($json | ConvertFrom-Json)
   }
 }
-& $env:DSH_CODEX_TEST_SCRIPT -Action $env:DSH_CODEX_TEST_ACTION -DryRun
+try {
+  & $env:DSH_CODEX_TEST_SCRIPT -Action $env:DSH_CODEX_TEST_ACTION -DryRun
+} catch {
+  [Console]::Error.WriteLine($_.Exception.Message)
+  exit 1
+}
 `
   const encoded = Buffer.from(source, 'utf16le').toString('base64')
   return spawnSync('powershell.exe', [
