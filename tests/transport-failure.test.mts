@@ -6,6 +6,7 @@ import test from 'node:test'
 import http from 'node:http'
 import { once } from 'node:events'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
+import { resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import { transportError, transportResponseBody } from '../src/oauth-network.js'
 import { normalizeTransportEvent } from '../src/transport-failure.js'
 import { openaiCodexSubscriptionProvider } from '../src/pi-ai-runtime.js'
@@ -78,6 +79,53 @@ test('only transient WebSocket failures receive transport context', () => {
     const event = { type: 'error', reason: 'error', error: { errorMessage: message } }
     assert.equal(normalizeTransportEvent((event as unknown as Parameters<typeof normalizeTransportEvent>[0])), event)
   }
+})
+
+test('only the exact upstream retry-buffer error receives transport context', () => {
+  const message = 'exceeded request buffer limit while retrying upstream'
+  const event = { type: 'error', reason: 'error', error: { errorMessage: message } } as unknown as Parameters<typeof normalizeTransportEvent>[0]
+  const normalized = normalizeTransportEvent(event)
+  assert.ok(normalized.type === 'error')
+  assert.equal(normalized.error.errorMessage, `Network transport failure: ${message}`)
+  assert.equal(normalizeTransportEvent(event, AbortSignal.abort()), event)
+  const aborted = { ...event, reason: 'aborted' } as typeof event
+  assert.equal(normalizeTransportEvent(aborted), aborted)
+  for (const errorMessage of ['failed to buffer the request body: length limit exceeded', 'payload too large', 'context window exceeded', '401 unauthorized', '507 insufficient storage', `${message}: different error`]) {
+    const other = { type: 'error', reason: 'error', error: { errorMessage } } as unknown as typeof event
+    assert.equal(normalizeTransportEvent(other), other)
+  }
+})
+
+test('DSH can retry HTTP and streamed gateway buffer failures without plugin replay', async t => {
+  const message = 'exceeded request buffer limit while retrying upstream'
+  let requests = 0
+  let streamed = false
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => {
+    requests++
+    return streamed
+      ? new Response(`data: ${JSON.stringify({ type: 'response.failed', response: { error: { message } } })}\n\n`, { headers: { 'content-type': 'text/event-stream' } })
+      : new Response(message, { status: 507 })
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+  const provider = openaiCodexSubscriptionProvider()
+  const profiles = new Map([['openai-codex', {
+    provider: 'openai-codex', piProvider: provider, configuredMaxTokens: new Map(), modelErrors: new Map(), transport: 'sse', streamIdleTimeoutMs: 3000,
+  }]])
+  const token = `e30.${Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'fixture' } })).toString('base64url')}.fake`
+  const adapter = new PiAiAdapter({ profiles: () => profiles, resolveApiKey: async () => token } as unknown as ConstructorParameters<typeof PiAiAdapter>[0])
+  const policy = resolveRetryPolicy(undefined, 'fixture')
+  assert.ok(policy.mode === 'normal' && policy.maxRetries > 0 && Number.isFinite(policy.maxRetries))
+  for (streamed of [false, true]) {
+    const chunks: StreamChunk[] = []
+    for await (const chunk of adapter.stream({ provider: 'openai-codex', model: 'gpt-5.6-luna', messages: [{ role: 'user', content: [{ type: 'text', text: 'fixture' }] }] })) chunks.push(chunk)
+    const finish = chunks.find(chunk => chunk.type === 'finish')
+    assert.ok(finish?.type === 'finish' && finish.reason.kind === 'error', JSON.stringify(chunks))
+    assert.equal(finish.reason.failure.code, 'TRANSPORT')
+    assert.ok(policy.retryableCodes.includes(finish.reason.failure.code))
+    assert.equal(finish.reason.failure.message, `Network transport failure: ${message}`)
+  }
+  assert.equal(requests, 2)
 })
 
 test('actual DSH adapter classifies a real mid-stream reset as TRANSPORT without plugin replay', { timeout: 5000 }, async t => {
