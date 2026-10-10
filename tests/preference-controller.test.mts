@@ -102,6 +102,8 @@ test('session speed does not leak into another session and rolls back failed sav
   } })
   const pending = controller.setSpeed('session-a', 'fast')
   assert.equal(controller.getSnapshot().sessionSpeedModes['session-a'], 'fast')
+  assert.equal(controller.getSnapshot().writable, false)
+  assert.equal(controller.getSnapshot().saving, true)
   assert.equal(controller.getSnapshot().sessionSpeedModes['session-b'], undefined)
   rejectWrite(new Error('failed'))
   await pending
