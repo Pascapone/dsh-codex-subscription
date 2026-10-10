@@ -45,6 +45,21 @@ bezier and eraser. Bezier accepts either `start` plus 1–64 complete segments o
 the legacy 4/7/10/... point array, never both. Invalid geometry is rejected rather
 than guessed or silently repaired.
 
+### SVG command
+
+`{op:"svg",svg:"<svg viewBox=\"0 0 1024 768\">…</svg>",layer:1}` lets the model draw a whole scene in the notation it is best at. A stroke command carries every Bezier point as a JSON object, roughly three times the tokens of the same curve in SVG path syntax, and models are trained on vastly more SVG than on this protocol, so long illustrations were slow and less detailed than the model could make them.
+
+The SVG is converted to the same native strokes (bezier, polygon, line, pen) in one batch, so the result stays editable, layered, exportable, and undoable as a single step.
+
+Supported: `path` (M L H V C S Q T A Z, relative forms, compact arc flags), `rect` (with `rx`/`ry`), `circle`, `ellipse`, `line`, `polyline`, `polygon`, `g`, `use` of an element in the same SVG, `transform` (matrix, translate, scale, rotate, skew), `fill`, `stroke`, `stroke-width`, `opacity`, `fill-opacity`, `stroke-opacity` and `style="…"` declarations, colors as `#rgb`, `#rrggbb`, `rgb()` or a basic name.
+
+Reported, not silent:
+- Gradients are flattened to their average color and returned in `warnings`; stack several bands for a real gradient.
+- A filled path with more than 64 curve segments is flattened to a polygon (`warnings`).
+- Points outside the canvas are clamped; the number is returned as `clampedPoints`.
+
+Refused with the element or attribute named: `text`, `image`, `filter`, `clipPath`, `mask`, `pattern`, `marker`, `symbol`, `style`, `foreignObject`, and `clip-path`/`mask`/`filter` attributes. The `viewBox` must match the canvas ratio. One command may hold up to 200000 characters, and a batch still stops at the stroke and point budgets.
+
 ## Lifecycle and recovery
 
 Document, history, run state and deduplication receipts belong to the plugin's
@@ -76,33 +91,15 @@ claim of professional painting-tool completeness.
 
 ## File interchange (Beta)
 
-The Drafts menu exports PNG, layered PSD, or `.dsh-sketch.json`. PSD exchanges
-ordinary RGB pixel layers; the native draft retains editable brush strokes.
-Import uses the existing file chooser and preserves the current draft before
-replacing the board. ORA is intentionally not included.
+The Drafts menu exports PNG or `.dsh-sketch.json`. The native draft retains
+editable brush strokes and can be imported again; import uses the existing file
+chooser and preserves the current draft before replacing the board. Layered PSD
+exchange was removed in 2.5.6 to keep the plugin small.
 
-PSD import accepts 8-bit RGB documents up to 4096 pixels per edge and 32 MB,
-with at most eight raster layers, and fits the long edge to 1024 pixels.
-Masks, effects, adjustments, non-normal blending and translucent groups are
-rejected instead of being silently misrendered. Export preserves the editor's
-white paper; if its bottom layer is hidden, a separate Paper layer is required.
-An eight-layer document with a hidden bottom layer must show that layer first.
-
-While the board is open, `window.dshSketchAgent.export('png'|'psd'|'draft')`
+While the board is open, `window.dshSketchAgent.export('png'|'draft')`
 returns `{ extension, mediaType, base64 }` for agent file delivery. This is
 separate from the browser's user-facing download/save behavior.
 
-### Local acceptance evidence
-
-The advanced illustration contains 427 native strokes in six layers at
-1024 x 768. The actual file chooser imported both exported formats. PSD
-retained all six named pixel layers; native JSON retained all 427 strokes and
-the selected layer. Both re-rendered images were pixel-identical to the source.
-Pillow independently decoded the PSD composite with an identical result.
-The user also verified the PSD in Photoshop and supplied a screenshot showing all six layers.
-The in-app browser previously canceled its blob download; successful file
-encoding and roundtrip do not establish successful browser download delivery.
-Artifacts are retained locally in `.artifacts/canvas-behind/`.
 
 ## Draft reliability (development)
 

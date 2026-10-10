@@ -1,10 +1,15 @@
+
 import { normalizeContext, type AssistantMessage } from '@earendil-works/pi-ai';
+type CapturedWire = FixtureWire & { model: string; reasoning?: {effort: string}; input: {type?: string; content: {type: string; detail?: string; text?: string}[]; output: {type: string; detail?: string}[]}[] };
+type FixtureSessionId = NonNullable<Parameters<PiAiAdapter['stream']>[0]['sessionId']>;
+type FixtureProfiles = ReturnType<ConstructorParameters<typeof PiAiAdapter>[0]['profiles']>;
 type FixtureWire = {store: boolean; prompt_cache_key: string; include: string[]; instructions: string; service_tier?: string; text: {verbosity: string}};
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { zstdDecompressSync } from 'node:zlib'
 
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
+import * as piAi from '@earendil-works/pi-ai'
 import { openaiCodexProvider } from '@earendil-works/pi-ai/providers/openai-codex'
 
 import { DshOAuthCredentialStore } from '../src/credential-store.js'
@@ -13,7 +18,11 @@ import {
   CONTEXT_MODE_CUSTOM,
   CONTEXT_MODE_EXTENDED,
   CONTEXT_MODE_STANDARD,
+  normalizeInputImageDetail,
 } from '../src/settings-contract.js'
+
+// pi-ai 0.87 reads the system prompt and tools from a leading system message; older releases read the context fields.
+const wireContext = normalizeContext
 
 const jwt = (accountId: string) => {
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url')
@@ -23,6 +32,14 @@ const jwt = (accountId: string) => {
 }
 
 const sse = (events: unknown[]) => `${events.map(event => `data: ${JSON.stringify(event)}`).join('\n\n')}\n\n`
+const pixelPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+
+test('input image detail normalization falls back to auto for unknown values', () => {
+  assert.equal(normalizeInputImageDetail('low'), 'low')
+  assert.equal(normalizeInputImageDetail('original'), 'original')
+  assert.equal(normalizeInputImageDetail('unknown'), 'auto')
+  assert.equal(normalizeInputImageDetail(undefined), 'auto')
+})
 
 const memoryCredentials = (initial: string | undefined) => {
   let value = initial
@@ -53,8 +70,8 @@ test('pi-ai Codex wire keeps a stable cache key, stateless storage, and server c
     const provider = openaiCodexProvider()
     const model = provider.getModels().find(model => model.id === 'gpt-5.6-luna')
     assert.ok(model)
-    let final!: AssistantMessage
-    for await (const event of provider.streamSimple(model, normalizeContext({
+    let final: AssistantMessage | undefined
+    for await (const event of provider.streamSimple(model, wireContext({
       systemPrompt: 'Stable prefix',
       messages: [{ role: 'user', content: 'hello', timestamp: 1 }],
     }), {
@@ -74,6 +91,7 @@ test('pi-ai Codex wire keeps a stable cache key, stateless storage, and server c
     assert.equal(wire.prompt_cache_key, 'session-stable')
     assert.deepEqual(wire.include, ['reasoning.encrypted_content'])
     assert.equal(wire.instructions, 'Stable prefix')
+    assert.ok(final)
     assert.equal(final.usage.cacheRead, 80)
     assert.equal(final.usage.input, 20)
   } finally {
@@ -112,7 +130,7 @@ test('DSH PiAiAdapter can execute the OAuth-only Codex provider with a refreshed
       streamIdleTimeoutMs: 10_000,
     }]])
     const adapter = new PiAiAdapter(({
-      profiles: () => profiles,
+      profiles: () => profiles as unknown as FixtureProfiles,
       resolveApiKey: async () => jwt('account-dsh'),
     } as unknown as ConstructorParameters<typeof PiAiAdapter>[0]))
     let text = ''
@@ -195,7 +213,7 @@ test('a near-expiry OAuth token refreshes before the first model request is disp
       streamIdleTimeoutMs: 10_000,
     }]])
     const adapter = new PiAiAdapter(({
-      profiles: () => profiles,
+      profiles: () => profiles as unknown as FixtureProfiles,
       resolveApiKey: async () => (await authModels.getAuth('openai-codex'))?.auth.apiKey,
     } as unknown as ConstructorParameters<typeof PiAiAdapter>[0]))
     for await (const _chunk of adapter.stream((({
@@ -238,7 +256,7 @@ test('subscription fast mode reaches only officially supported Codex model reque
       streamIdleTimeoutMs: 10_000,
     }]])
     const adapter = new PiAiAdapter(({
-      profiles: () => profiles,
+      profiles: () => profiles as unknown as FixtureProfiles,
       resolveApiKey: async () => jwt('account-fast'),
     } as unknown as ConstructorParameters<typeof PiAiAdapter>[0]))
     const run = async (modelId: string, sessionId: string) => {
@@ -291,7 +309,7 @@ test('output detail reaches only verbosity-capable Codex requests', async () => 
       provider: 'openai-codex', displayName: 'ChatGPT subscription', piProvider: provider,
       configuredMaxTokens: new Map(), modelErrors: new Map(), transport: 'sse', streamIdleTimeoutMs: 10_000,
     }]])
-    const adapter = new PiAiAdapter(({ profiles: () => profiles, resolveApiKey: async () => jwt('account-verbosity') } as unknown as ConstructorParameters<typeof PiAiAdapter>[0]))
+    const adapter = new PiAiAdapter(({ profiles: () => profiles as unknown as FixtureProfiles, resolveApiKey: async () => jwt('account-verbosity') } as unknown as ConstructorParameters<typeof PiAiAdapter>[0]))
     const run = async (model: string) => {
       for await (const _chunk of adapter.stream((({
         provider: 'openai-codex', model, messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }], sessionId: `verbosity-${model}-${wires.length}`,
@@ -309,6 +327,176 @@ test('output detail reaches only verbosity-capable Codex requests', async () => 
   }
 })
 
+test('Codex requests never carry temperature, which the backend rejects', async () => {
+  const previousFetch = globalThis.fetch
+  const wires: CapturedWire[] = []
+  globalThis.fetch = async (_input, init) => {
+    wires.push(JSON.parse(zstdDecompressSync(Buffer.from(init!.body as Uint8Array)).toString('utf8')))
+    return new Response(sse([
+      { type: 'response.created', response: { id: 'resp_t' } },
+      { type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'msg_t', role: 'assistant', content: [] } },
+      { type: 'response.output_text.delta', output_index: 0, content_index: 0, delta: 'ok' },
+      { type: 'response.output_item.done', output_index: 0, item: { type: 'message', id: 'msg_t', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'ok', annotations: [] }] } },
+      { type: 'response.done', response: { id: 'resp_t', status: 'completed', output: [], usage: { input_tokens: 2, output_tokens: 1, total_tokens: 3 } } },
+    ]), { status: 200, headers: { 'content-type': 'text/event-stream' } })
+  }
+  try {
+    const provider = openaiCodexSubscriptionProvider()
+    const profiles = new Map([['openai-codex', {
+      provider: 'openai-codex', displayName: 'ChatGPT subscription', piProvider: provider,
+      configuredMaxTokens: new Map(), modelErrors: new Map(), transport: 'sse', streamIdleTimeoutMs: 10_000,
+    }]])
+    const adapter = new PiAiAdapter({ profiles: () => profiles as unknown as FixtureProfiles, resolveApiKey: async () => jwt('account-temperature') } as unknown as ConstructorParameters<typeof PiAiAdapter>[0])
+    for await (const _chunk of adapter.stream({
+      provider: 'openai-codex', model: 'gpt-5.6-sol', temperature: 0,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'review' }] }], sessionId: 'temperature-review' as FixtureSessionId,
+    })) {}
+    assert.equal(wires.length, 1)
+    assert.equal('temperature' in wires[0], false)
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})
+
+test('official reviewer routes only DSH Auto review calls to the catalog reviewer model', async () => {
+  const previousFetch = globalThis.fetch
+  const wires: CapturedWire[] = []
+  globalThis.fetch = async (_input, init) => {
+    wires.push(JSON.parse(zstdDecompressSync(Buffer.from(init!.body as Uint8Array)).toString('utf8')))
+    return new Response(sse([
+      { type: 'response.created', response: { id: 'resp_r' } },
+      { type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'msg_r', role: 'assistant', content: [] } },
+      { type: 'response.output_text.delta', output_index: 0, content_index: 0, delta: '{"risk":"low","decision":"allow"}' },
+      { type: 'response.output_item.done', output_index: 0, item: { type: 'message', id: 'msg_r', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: '{"risk":"low","decision":"allow"}', annotations: [] }] } },
+      { type: 'response.done', response: { id: 'resp_r', status: 'completed', output: [], usage: { input_tokens: 2, output_tokens: 1, total_tokens: 3 } } },
+    ]), { status: 200, headers: { 'content-type': 'text/event-stream' } })
+  }
+  try {
+    let reviewModel = 'official'
+    let route: {id: string; effort: string} | undefined = { id: 'codex-auto-review', effort: 'low' }
+    const catalog = { getModels: () => openaiCodexProvider().getModels(), metadata: () => undefined, reviewModel: (parent: string) => { assert.equal(parent, 'gpt-5.6-sol'); return route } }
+    const provider = openaiCodexSubscriptionProvider({ resolveReviewModel: () => reviewModel, resolveSpeedMode: () => 'fast', catalog: catalog as unknown as NonNullable<Parameters<typeof openaiCodexSubscriptionProvider>[0]>['catalog'] })
+    const model = provider.getModels().find(candidate => candidate.id === 'gpt-5.6-sol')
+    // DSH's adapter hands the reviewer policy over as `systemPrompt`.
+    const run = async (systemPrompt: string) => {
+      for await (const _chunk of provider.streamSimple(model!,
+        wireContext({ systemPrompt, messages: [{ role: 'user', content: 'pending action', timestamp: 1 }] }),
+        { apiKey: jwt('account-review'), temperature: 0, sessionId: 'review' })) {}
+    }
+    const policy = 'REVIEW_POLICY\nYou are the final authorization reviewer for exactly one pending tool call.'
+    await run(policy)
+    await run('You are a helpful assistant.')
+    route = undefined
+    await run(policy)
+    reviewModel = 'session'
+    route = { id: 'codex-auto-review', effort: 'low' }
+    await run(policy)
+    assert.equal(wires[0].model, 'codex-auto-review')
+    assert.equal(wires[0].reasoning?.effort, 'low')
+    for (const key of ['temperature', 'service_tier', 'text']) assert.equal(key in wires[0], false, key)
+    assert.equal(wires[1].model, 'gpt-5.6-sol', 'ordinary requests keep the conversation model')
+    assert.equal(wires[1].service_tier, 'priority')
+    assert.equal(wires[2].model, 'gpt-5.6-sol', 'without a catalog reviewer the session model reviews')
+    assert.equal(wires[3].model, 'gpt-5.6-sol', 'the default setting keeps the session model')
+    assert.deepEqual(provider.reviewCounters(), { requests: 2, routed: 1, sessionModel: 1, retries: 0 })
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})
+
+test('a DSH Auto review that drops before its answer is retried without leaking the failed attempt', async () => {
+  const previousFetch = globalThis.fetch
+  let calls = 0
+  const answer = '{"risk":"low","decision":"allow"}'
+  globalThis.fetch = async () => {
+    calls += 1
+    const events = calls === 1
+      ? [{ type: 'response.created', response: { id: 'resp_d' } },
+        { type: 'error', message: 'upstream stream ended before a completion event; this turn may be incomplete' }]
+      : [{ type: 'response.created', response: { id: 'resp_ok' } },
+        { type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'msg_ok', role: 'assistant', content: [] } },
+        { type: 'response.output_text.delta', output_index: 0, content_index: 0, delta: answer },
+        { type: 'response.output_item.done', output_index: 0, item: { type: 'message', id: 'msg_ok', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: answer, annotations: [] }] } },
+        { type: 'response.done', response: { id: 'resp_ok', status: 'completed', output: [], usage: { input_tokens: 2, output_tokens: 1, total_tokens: 3 } } }]
+    return new Response(sse(events), { status: 200, headers: { 'content-type': 'text/event-stream' } })
+  }
+  try {
+    const provider = openaiCodexSubscriptionProvider()
+    const model = provider.getModels().find(candidate => candidate.id === 'gpt-5.6-sol')
+    const context = wireContext({ systemPrompt: 'REVIEW_POLICY' + String.fromCharCode(10) + 'You are the final authorization reviewer for exactly one pending tool call.', messages: [{ role: 'user', content: 'pending action', timestamp: 1 }] })
+    const events = []
+    for await (const event of provider.streamSimple(model!, context, { apiKey: jwt('account-retry'), sessionId: 'review-retry' })) events.push(event)
+    assert.equal(calls, 2)
+    assert.equal(events.some(event => event.type === 'error'), false, 'the dropped attempt stays hidden')
+    const finalEvent = events.at(-1)
+    assert.ok(finalEvent?.type === 'done')
+    assert.equal(finalEvent.message.content.find(part => part.type === 'text')?.text, answer)
+    assert.equal(provider.reviewCounters().retries, 1)
+
+    calls = 0
+    globalThis.fetch = async () => { calls += 1; return new Response(sse([{ type: 'error', message: 'upstream stream ended before a completion event' }]), { status: 200, headers: { 'content-type': 'text/event-stream' } }) }
+    const failed = []
+    for await (const event of provider.streamSimple(model!, context, { apiKey: jwt('account-retry'), sessionId: 'review-retry' })) failed.push(event)
+    assert.equal(calls, 3, 'two retries, then the failure reaches DSH so it can fail closed')
+    assert.equal(failed.at(-1)!.type, 'error')
+
+    calls = 0
+    const ordinary = []
+    for await (const event of provider.streamSimple(model!, wireContext({ messages: context.messages.filter(message => message.role !== 'system') }), { apiKey: jwt('account-retry'), sessionId: 'chat' })) ordinary.push(event)
+    assert.equal(calls, 1, 'ordinary turns keep DSH retry semantics')
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})
+
+test('input image detail follows the selected level on each Codex request', async () => {
+  const previousFetch = globalThis.fetch
+  const wires: CapturedWire[] = []
+  let nativeAutoDetail
+  globalThis.fetch = async (_input, init) => {
+    wires.push(JSON.parse(zstdDecompressSync(Buffer.from(init!.body as Uint8Array)).toString('utf8')))
+    return new Response(sse([
+      { type: 'response.created', response: { id: `resp_i${wires.length}` } },
+      { type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: `msg_i${wires.length}`, role: 'assistant', content: [] } },
+      { type: 'response.output_text.delta', output_index: 0, content_index: 0, delta: 'ok' },
+      { type: 'response.output_item.done', output_index: 0, item: { type: 'message', id: `msg_i${wires.length}`, role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'ok', annotations: [] }] } },
+      { type: 'response.done', response: { id: `resp_i${wires.length}`, status: 'completed', output: [], usage: { input_tokens: 2, output_tokens: 1, total_tokens: 3 } } },
+    ]), { status: 200, headers: { 'content-type': 'text/event-stream' } })
+  }
+  try {
+    let detail = 'auto'
+    const provider = openaiCodexSubscriptionProvider({ resolveInputImageDetail: () => detail })
+    const model = provider.getModels().find(value => value.id === 'gpt-5.6-sol')
+    assert.ok(model)
+    for (const value of ['auto', 'low', 'high', 'original']) {
+      detail = value
+      for await (const _event of provider.streamSimple(model, wireContext({
+        systemPrompt: 'Image detail check',
+        messages: [
+          { role: 'user', content: [{ type: 'text', text: 'Inspect this image' }, { type: 'image', mimeType: 'image/png', data: pixelPng }], timestamp: 1 },
+          { role: 'assistant', provider: model.provider, api: model.api, model: model.id, content: [{ type: 'toolCall', id: 'call_image|fc_image', name: 'inspect', arguments: {} }], usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: {input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0} }, stopReason: 'toolUse', timestamp: 2 },
+          { role: 'toolResult', toolCallId: 'call_image|fc_image', toolName: 'inspect', isError: false, content: [{ type: 'text', text: 'Tool image' }, { type: 'image', mimeType: 'image/png', data: pixelPng }], timestamp: 3 },
+        ],
+      }), {
+        apiKey: jwt('account-images'), sessionId: `image-${value}`, transport: 'sse',
+        onPayload: payload => {
+          if (value === 'auto') nativeAutoDetail = (payload as CapturedWire).input[0].content.find(part => part.type === 'input_image')?.detail
+          return payload
+        },
+      })) {
+        if (_event.type === 'error') throw _event.error
+      }
+    }
+    const levels = ['auto', 'low', 'high', 'original']
+    assert.deepEqual(wires.map(wire => wire.input[0].content.find(part => part.type === 'input_image')!.detail), levels)
+    assert.deepEqual(wires.map(wire => wire.input.find(item => item.type === 'function_call_output')!.output.find(part => part.type === 'input_image')!.detail), levels)
+    assert.equal(wires[0].input[0].content[0].text, 'Inspect this image')
+    assert.equal(wires[0].input[0].content.find(part => part.type === 'input_image')!.detail, nativeAutoDetail, 'auto leaves the pi-ai native image detail unchanged')
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})
+
 test('context presets preserve catalog defaults and cap every supported model independently', () => {
   let contextMode = CONTEXT_MODE_STANDARD
   let customContextWindow = 500_000
@@ -318,8 +506,14 @@ test('context presets preserve catalog defaults and cap every supported model in
     resolveCustomContextWindow: (modelKey: string) => perModel.get(modelKey) ?? customContextWindow,
   }) as unknown as NonNullable<Parameters<typeof openaiCodexSubscriptionProvider>[0]>))
   const contexts = () => Object.fromEntries(provider.getModels().map(model => [model.id, model.contextWindow]))
+  // The bundled model list changes between pi-ai releases; check the audited ids that this one still ships.
+  const expectContexts = (actual: Record<string, number>, expected: Record<string, number>) => {
+    const shipped = Object.fromEntries(Object.entries(expected).filter(([id]) => id in actual))
+    assert.ok(Object.keys(shipped).length >= 3, 'the installed pi-ai still ships at least three audited models')
+    assert.partialDeepStrictEqual(actual, shipped)
+  }
 
-  assert.partialDeepStrictEqual(contexts(), {
+  expectContexts(contexts(), {
     'gpt-5.3-codex-spark': 128_000,
     'gpt-6-sol': 272_000,
     'gpt-6-luna': 272_000,
@@ -331,7 +525,7 @@ test('context presets preserve catalog defaults and cap every supported model in
 
   if ('gpt-6-astra' in contexts()) assert.equal(contexts()['gpt-6-astra'], 272_000)
   contextMode = CONTEXT_MODE_EXTENDED
-  assert.partialDeepStrictEqual(contexts(), {
+  expectContexts(contexts(), {
     'gpt-5.3-codex-spark': 128_000,
     'gpt-6-sol': 272_000,
     'gpt-6-luna': 272_000,
@@ -345,7 +539,7 @@ test('context presets preserve catalog defaults and cap every supported model in
   contextMode = CONTEXT_MODE_CUSTOM
   perModel.set('gpt-6-luna', 300_000)
   perModel.set('gpt-5.6', 750_000)
-  assert.partialDeepStrictEqual(contexts(), {
+  expectContexts(contexts(), {
     'gpt-5.3-codex-spark': 128_000,
     'gpt-6-sol': 272_000,
     'gpt-6-luna': 272_000,
@@ -357,7 +551,52 @@ test('context presets preserve catalog defaults and cap every supported model in
 
   if ('gpt-6-astra' in contexts()) assert.equal(contexts()['gpt-6-astra'], 500_000)
   customContextWindow = 64_000
-  assert.equal(contexts()['gpt-6-sol'], 128_000)
-  perModel.set('gpt-6-luna', 200_000)
-  assert.equal(contexts()['gpt-6-luna'], 200_000)
+  assert.equal(contexts()['gpt-5.5'], 128_000)
+  perModel.set('gpt-5.5', 200_000)
+  assert.equal(contexts()['gpt-5.5'], 200_000)
+})
+
+test('the Ultrafast tier reaches the wire only for a model the account catalog lists it for', async () => {
+  const previousFetch = globalThis.fetch
+  const wires: CapturedWire[] = []
+  globalThis.fetch = async (_input, init) => {
+    wires.push(JSON.parse(zstdDecompressSync(Buffer.from(init!.body as Uint8Array)).toString('utf8')))
+    return new Response(sse([
+      { type: 'response.created', response: { id: `resp_u${wires.length}` } },
+      { type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: `msg_u${wires.length}`, role: 'assistant', content: [] } },
+      { type: 'response.output_text.delta', output_index: 0, content_index: 0, delta: 'ok' },
+      { type: 'response.output_item.done', output_index: 0, item: { type: 'message', id: `msg_u${wires.length}`, role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'ok', annotations: [] }] } },
+      { type: 'response.done', response: { id: `resp_u${wires.length}`, status: 'completed', output: [], usage: { input_tokens: 2, output_tokens: 1, total_tokens: 3 } } },
+    ]), { status: 200, headers: { 'content-type': 'text/event-stream' } })
+  }
+  try {
+    let speedMode: 'ultrafast' | 'fast' = 'ultrafast'
+    const metadata: Record<string, {supportsFast: boolean; supportsUltrafast: boolean}> = { 'gpt-6-astra': { supportsFast: true, supportsUltrafast: true }, 'gpt-6-sol': { supportsFast: true, supportsUltrafast: false } }
+    const base = openaiCodexProvider().getModels()[0]
+    const catalog = {
+      getModels: () => Object.keys(metadata).map(id => ({ ...base, id, name: id })),
+      metadata: (id: string) => metadata[id],
+    }
+    const provider = openaiCodexSubscriptionProvider({ catalog: catalog as unknown as NonNullable<Parameters<typeof openaiCodexSubscriptionProvider>[0]>['catalog'], resolveSpeedMode: () => speedMode })
+    const profiles = new Map([['openai-codex', {
+      provider: 'openai-codex', displayName: 'ChatGPT subscription', piProvider: provider,
+      configuredMaxTokens: new Map(), modelErrors: new Map(), transport: 'sse', streamIdleTimeoutMs: 10_000,
+    }]])
+    const adapter = new PiAiAdapter({ profiles: () => profiles as unknown as FixtureProfiles, resolveApiKey: async () => jwt('account-ultra') } as unknown as ConstructorParameters<typeof PiAiAdapter>[0])
+    const run = async (modelId: string) => {
+      for await (const chunk of adapter.stream({
+        provider: 'openai-codex', model: modelId,
+        messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }], sessionId: `session-u-${modelId}` as FixtureSessionId,
+      })) void chunk
+    }
+    await run('gpt-6-astra')
+    await run('gpt-6-sol')
+    speedMode = 'fast'
+    await run('gpt-6-astra')
+    assert.equal(wires[0].service_tier, 'ultrafast')
+    assert.equal('service_tier' in wires[1], false, 'a model without the tier stays standard, never downgraded to another tier')
+    assert.equal(wires[2].service_tier, 'priority')
+  } finally {
+    globalThis.fetch = previousFetch
+  }
 })

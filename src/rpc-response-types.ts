@@ -7,10 +7,14 @@ export type PublicResetCredit = { ref?: string; name?: string; expiresAt?: numbe
 export type PublicResetChallenge = { challengeId: string; readyAt: number; expiresAt: number; title?: string; description?: string; creditExpiresAt?: number; availableCount?: number; state?: string };
 export type ForecastUsage = Omit<UsageSnapshot, 'rateLimits'> & { rateLimits: (Omit<UsageSnapshot['rateLimits'][number], 'windows'> & { windows: (UsageSnapshot['rateLimits'][number]['windows'][number] & { forecast?: QuotaForecast | { status: 'idle' } })[] })[] };
 export type SketchTaskDelivery = { id: string; cancelled?: boolean; request: SketchRequest; expiresAt: number };
+export type DefaultModelStatus = { available: boolean; managed: boolean; provider?: string; model?: string; reasoningEffort?: string };
+export type StorageStatus = { bytes: number; limit: number; readable?: boolean };
 export type RpcResponseMap = {
+  'default-model/status': DefaultModelStatus; 'default-model/select': DefaultModelStatus;
+  'storage/status': StorageStatus; 'storage/clear-forecast': StorageStatus;
   status: AccountStatusView; logout: AccountStatusView; 'account/select': AccountStatusView; 'account/remove': AccountStatusView;
   'login/start': LoginFlow; 'login/status': LoginFlow; 'login/submit': LoginFlow; 'login/cancel': LoginFlow;
-  usage: ForecastUsage; diagnostics: Record<string, unknown>;
+  usage: ForecastUsage; diagnostics: import('./diagnostic-types.js').DiagnosticReport;
   'preferences/status': Record<string, unknown>; 'preferences/models': Record<string, unknown>; 'preferences/update': Record<string, unknown>;
   'runtime/status': RuntimeStatus; 'runtime/install': RuntimeStatus; 'runtime/remove': RuntimeStatus; 'runtime/cancel': RuntimeStatus;
   'reset-credit/inspect': { availableCount: number; credits: PublicResetCredit[]; nextExpiresAt?: number };

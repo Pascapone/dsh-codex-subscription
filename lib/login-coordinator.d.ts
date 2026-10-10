@@ -26,6 +26,7 @@ export declare class CodexLoginCoordinator {
         value: unknown;
     }): Promise<LoginFlow>;
     cancel(id: unknown): Promise<LoginFlow>;
+    dispose(): Promise<void>;
     logout(options?: AuthOperationOptions): Promise<import("./auth-types.js").AccountStatus>;
     selectAccount(id: unknown): Promise<import("./auth-types.js").AccountStatus>;
     removeAccount(id: unknown): Promise<import("./auth-types.js").AccountStatus>;

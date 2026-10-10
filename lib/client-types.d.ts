@@ -12,4 +12,6 @@ export type CodexUiProps = {
     rpc: SubscriptionRpcClient;
     accountStatus: AccountStatusController;
     t: Translate;
+    diagnostics?: ReturnType<typeof import('./diagnostic-host.js').createHostDiagnostics>;
+    defaultModel?: ReturnType<typeof import('./default-model-controller.js').createDefaultModelController>;
 };

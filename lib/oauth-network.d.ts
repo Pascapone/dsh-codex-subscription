@@ -10,6 +10,19 @@ export declare function withCodexNetwork<T>(run: () => T | Promise<T>, options?:
 export declare const withCodexOAuthNetwork: <T>(run: () => T | Promise<T>, options?: NetworkOptions) => Promise<T>;
 export declare function createCodexNetworkTransport(options?: NetworkOptions): Readonly<{
     run: <T>(area: string, operation: () => T | Promise<T>, connection?: NetworkOptions) => Promise<T>;
+    history: () => {
+        scope: string;
+        capacity: number;
+        dropped: number;
+        events: {
+            area: string;
+            status: string;
+            observedAt: number;
+            sequence: number;
+            code?: string;
+            httpStatus?: number;
+        }[];
+    };
     fetch: (area: string, input: FetchInput, init?: FetchInit) => Promise<Response>;
     snapshot: () => {
         [k: string]: {

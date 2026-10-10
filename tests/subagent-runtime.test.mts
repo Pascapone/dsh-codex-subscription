@@ -1,3 +1,4 @@
+
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises'
@@ -45,6 +46,11 @@ test('preparation checks the provider-local CLI without shell or PATH and suppor
     await writeFile(provider,JSON.stringify({version:'0.1.7-rc.2'}))
     await writeFile(host,JSON.stringify({version:'0.1.7-rc.2'}))
     assert.equal(matchingSubagentRuntimeVersion(resolve),'0.1.7-rc.2')
+    assert.deepEqual(inspectSubagentRuntime(resolve),{installed:true})
+    await loadSubagentRuntime({resolve,run,importModule:async()=>({JsonRpcLineTransport:class {}})})
+    await writeFile(provider,JSON.stringify({version:'0.2.0-rc.1'}))
+    await writeFile(host,JSON.stringify({version:'0.2.0-rc.1'}))
+    assert.equal(matchingSubagentRuntimeVersion(resolve),'0.2.0-rc.1')
     assert.deepEqual(inspectSubagentRuntime(resolve),{installed:true})
     await loadSubagentRuntime({resolve,run,importModule:async()=>({JsonRpcLineTransport:class {}})})
     await writeFile(provider,JSON.stringify({version:'9.9.9'}))

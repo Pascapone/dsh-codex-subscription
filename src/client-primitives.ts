@@ -2,6 +2,7 @@ import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
 type LegacyIcons = Partial<Record<"IconCheckOutline16" | "IconChevronDownOutline14" | "IconChevronRightOutline14" | "IconChevronLeftOutline14" | "IconCloseOutline16" | "IconCopyOutline16" | "IconDownloadOutline16" | "IconEditOutline16" | "IconFullscreenOutline16", typeof primitives.IconCheckOutlineRegular>>;
 export const Input = primitives.Input
 export const Button = primitives.Button
+export const Switch = primitives.Switch
 export const useAnchoredPosition = primitives.useAnchoredPosition
 export const useDismissOnOutsidePointer = primitives.useDismissOnOutsidePointer
 export const IconCheckOutline16 = (primitives as typeof primitives & LegacyIcons).IconCheckOutline16 ?? primitives.IconCheckOutlineRegular

@@ -16,10 +16,13 @@ export declare const isApproximateWindow: (seconds: number, expected: number) =>
 export declare const windowLabel: (seconds: number, t: Translate) => string;
 export declare const validDate: (value: unknown) => Date | undefined;
 export declare const usePreferenceSnapshot: (preference: PreferenceController) => Readonly<{
-    connectionMode: string;
-    compactionMode: string;
+    autoQuotaRetryAvailable: boolean;
+    autoQuotaRetry: boolean;
+    connectionMode: "websocket" | "sse";
+    reviewModel: "session" | "official";
+    compactionMode: "dsh" | "cloud";
     codexBasePrompt: boolean;
-    subagentBackend: string;
+    subagentBackend: "dsh" | "codex";
     subagentBackendAvailable: boolean;
     subagentRuntimeInstalled: boolean;
     quickQuotaMode: import("./settings-types.js").QuickQuotaMode;
@@ -29,15 +32,26 @@ export declare const usePreferenceSnapshot: (preference: PreferenceController) =
         [x: string]: unknown;
     };
     outputVerbosity: import("./settings-types.js").OutputVerbosity;
+    inputImageDetail: string;
+    streamIdleTimeoutMinutes: number;
     contextMode: import("./settings-types.js").ContextMode;
     customContextWindow: number;
     customContextWindows: {
         [x: string]: number;
     };
     contextModels: import("./preference-types.js").ContextModelDescriptor[];
+    availableModels: {
+        id: string;
+        name: string;
+    }[];
+    disabledModels: string[];
     verbosityModels: string[];
     fastModels: string[] | undefined;
-    catalogStatus: unknown;
+    ultrafastModels: string[];
+    catalogStatus: {
+        source: string;
+        refresh: string;
+    } | undefined;
     modelsLoading: boolean;
     modelError: boolean;
     writable: boolean;
@@ -50,7 +64,6 @@ export declare const usePreferenceSnapshot: (preference: PreferenceController) =
     imageAnnotations: boolean;
     imageSketch: boolean;
     imageSketchAgent: boolean;
-    imageSketchAgentPreview: boolean;
     imageModel: import("./settings-types.js").ImageModel;
     imageQuality: import("./settings-types.js").ImageQuality;
     quotaShortThreshold: number;
@@ -60,7 +73,7 @@ export declare const usePreferenceSnapshot: (preference: PreferenceController) =
     searchDomains: string[];
     quotaAlerts: import("./settings-types.js").QuotaAlertMode;
     transcriptionEnabled: boolean;
-    status: "ready" | "loading" | "unavailable";
+    status: "ready" | "unavailable" | "loading";
 }>;
 export declare const useAccountStatusSnapshot: (accountStatus: AccountStatusController) => ReturnType<AccountStatusController["getSnapshot"]>;
 export declare const notifyQuickQuota: () => boolean;

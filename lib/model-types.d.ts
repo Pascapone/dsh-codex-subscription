@@ -1,6 +1,7 @@
 import type { Api, AuthOperationOptions, AuthResult, Credential, Model, ThinkingLevelMap } from '@earendil-works/pi-ai';
 export type CodexModel = Model<'openai-codex-responses'> & {
     maxContextWindow?: number;
+    description?: string;
 };
 export interface RemoteModel {
     id: string;
@@ -15,6 +16,11 @@ export interface RemoteModel {
     supportVerbosity: boolean;
     defaultVerbosity?: 'low' | 'medium' | 'high';
     supportsFast: boolean;
+    supportsUltrafast?: boolean;
+    retirement?: {
+        at: number;
+        upgradeTo?: string;
+    };
     templateId?: string;
     unsupported?: {
         reasoning?: string[];
@@ -28,6 +34,8 @@ export interface AuthReaders {
 }
 export interface ModelCatalogOptions extends Partial<AuthReaders> {
     baseModels?: () => readonly CodexModel[];
+    now?: () => number;
+    onUpdated?: () => void;
     fetch?: typeof fetch;
     setTimeout?: (callback: () => void, delay: number) => ReturnType<typeof setTimeout>;
     clearTimeout?: (timer: ReturnType<typeof setTimeout> | undefined) => void;
@@ -46,10 +54,18 @@ export interface UsageLimit {
     windows: UsageWindow[];
 }
 export interface CodexUsage {
+    planType?: string;
+    chatPass?: {
+        windows: UsageWindow[];
+    };
     rateLimits: UsageLimit[];
     credits?: {
         unlimited: boolean;
         balance?: string;
+        approxLocalMessages?: number[];
+        approxCloudMessages?: number[];
+        expiresAt?: number;
+        expirySource?: string;
     };
     individualLimit?: {
         limit: string;

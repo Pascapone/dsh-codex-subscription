@@ -61,15 +61,16 @@ export declare function createSubscriptionSubagent({ ctx, nativeHome, resolveAut
     }>;
     dispose(): void;
 };
+/**
+ * DSH 0.2 mounts Agent preset rows once, at boot and before plugins load, so the
+ * Loader never lists them and `internal/config` never reaches a later listener.
+ * Read them from the preset registry; a host without it simply has none.
+ */
+export declare function presetEntries(ctx: Pick<Context, 'get'>): SwitchEntry[];
 /** Change only standard independent spawn tools; leave fork/custom tools untouched. */
 export declare function createSubagentBackendSwitcher({ entries, prepare, persist }: SwitcherOptions): {
     select: (mode: string) => Promise<void>;
-    configure: (fiber: SwitchFiber, config: ToolConfig) => ToolConfig | {
-        provider: string;
-        modelSelectionSettings: boolean;
-        backgroundMode: string;
-        maxDepth: string;
-    };
+    configure: (fiber: SwitchFiber, config: ToolConfig) => ToolConfig;
     dispose(): Promise<void>;
 };
 export { loadSubagentRuntime } from './subagent-runtime.js';

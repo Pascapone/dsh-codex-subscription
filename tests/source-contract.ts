@@ -1,5 +1,5 @@
 import { readFile as readRaw } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 
@@ -59,7 +59,9 @@ function authoredSource(path: URL | string): { authored: URL; jsx: boolean } | u
   if (!match) {
     if (/[\\/]tsdown\.config\.mjs$/.test(value)) return { authored: new URL('tsdown.config.ts', authoredRoot), jsx: false };
     const helper = /[\\/](scripts|tests)[\\/](.+)\.mjs$/.exec(value);
-    return helper ? { authored: new URL(`${helper[1]}/${helper[2]!.replaceAll('\\', '/')}.mts`, authoredRoot), jsx: false } : undefined;
+    if (!helper) return undefined;
+    const authored = new URL(`${helper[1]}/${helper[2]!.replaceAll('\\', '/')}.mts`, authoredRoot);
+    return existsSync(authored) ? { authored, jsx: false } : undefined;
   }
   let relative = match[1]!.replace(/\.jsx$/, '.tsx').replace(/\.js$/, '.ts');
   if (relative === 'subscription-image-viewer.tsx') relative = 'subscription-image-viewer-overlay.tsx';

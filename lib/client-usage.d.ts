@@ -1,5 +1,9 @@
 import type { CodexUiProps, Translate } from './client-types.js';
-import type { PublicResetCredit } from './rpc-response-types.js';
+import type { PublicResetCredit, ForecastUsage } from './rpc-response-types.js';
+export declare function CreditExpiry({ credits, t }: {
+    credits: NonNullable<ForecastUsage['credits']>;
+    t: Translate;
+}): import("react/jsx-runtime").JSX.Element | null;
 export declare function ResetTime({ resetsAt, t }: {
     resetsAt?: number;
     t: Translate;

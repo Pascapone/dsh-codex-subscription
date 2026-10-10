@@ -68,6 +68,7 @@ export class CodexLoginCoordinator {
   declare createId: () => string;
   #sessions = new Map<string, LoginSession>()
   #activeId: string | undefined
+  #disposed = false
 
   constructor(auth: AuthService, options: { createId?: () => string } = {}) {
     this.auth = auth
@@ -89,6 +90,7 @@ export class CodexLoginCoordinator {
   }
 
   async start({ method, label }: { method: unknown; label?: unknown }): Promise<LoginFlow> {
+    if (this.#disposed) throw new Error('Codex login coordinator disposed')
     if (!LOGIN_METHODS.has(method as string)) throw new Error(`unsupported Codex login method: ${String(method)}`)
     if (label !== undefined && (typeof label !== 'string' || label.trim().length === 0 || label.trim().length > 48)) {
       throw new Error('unsupported Codex account label')
@@ -275,6 +277,13 @@ export class CodexLoginCoordinator {
       session.controller.abort(new Error('Codex login cancelled'))
     }
     return this.read(id)
+  }
+
+  async dispose() {
+    this.#disposed = true
+    await Promise.all([...this.#sessions.keys()].map(id => this.cancel(id)))
+    this.#sessions.clear()
+    this.#activeId = undefined
   }
 
   async logout(options?: AuthOperationOptions) {

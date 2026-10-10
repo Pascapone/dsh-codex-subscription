@@ -1,3 +1,4 @@
+
 import type { RefObject } from 'react';
 type CursorPointer = Pick<PointerEvent, 'clientX' | 'clientY' | 'pointerId' | 'pointerType' | 'pressure'>;
 import { useEffect, useRef } from 'react'
@@ -14,7 +15,7 @@ export function useSketchDismiss(open: boolean, close: (open: boolean) => void, 
       // A click that dismisses a panel must not leave an accidental dot.
       if((event.target as HTMLElement).matches?.('canvas')){event.preventDefault();event.stopPropagation();(event.target as HTMLElement).focus({preventScroll:true})}
     }
-    const key=(event: KeyboardEvent)=>{if(event.key!=='Escape')return;event.preventDefault();event.stopPropagation();latest.current(false);dialog.querySelector('canvas')?.focus({preventScroll:true})}
+    const key=(event: KeyboardEvent)=>{if(event.key!=='Escape'||!(event.target instanceof Element)||event.target.closest('dialog')!==dialog)return;event.preventDefault();event.stopPropagation();latest.current(false);dialog.querySelector('canvas')?.focus({preventScroll:true})}
     const hidden=()=>latest.current(false)
     document.addEventListener('pointerdown',pointer,true);document.addEventListener('keydown',key,true);dialog.addEventListener('close',hidden)
     return()=>{document.removeEventListener('pointerdown',pointer,true);document.removeEventListener('keydown',key,true);dialog.removeEventListener('close',hidden)}

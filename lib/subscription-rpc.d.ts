@@ -10,7 +10,7 @@ import type { createCodexTranscriptionProvider } from './codex-transcription.js'
 import type { SpeedMode } from './settings-types.js';
 interface RpcHandlerOptions {
     authHandler: ReturnType<typeof createCodexRpcHandler>;
-    usageReader: Pick<ReturnType<typeof createQuotaForecastReader>, 'read' | 'clearScope' | 'clear' | 'clearCache'>;
+    usageReader: Pick<ReturnType<typeof createQuotaForecastReader>, 'read' | 'clearScope' | 'clear' | 'clearCache' | 'storage'>;
     resetCreditService: ReturnType<typeof createCodexResetCreditService>;
     preferences: {
         status(): Record<string, unknown>;
@@ -24,7 +24,10 @@ interface RpcHandlerOptions {
     resolveInheritedOriginal?: (sessionId: string, assetId: string) => ReturnType<typeof inheritedOriginalImageRef>;
     closeConnections?: () => void;
     transcriptionEnabled?: () => boolean;
-    transcribeAudio: ReturnType<typeof createCodexTranscriptionProvider>;
+    onAccountChanged?: () => void;
+    onCleanupFailure?: () => void;
+    defaultModel?: ReturnType<typeof import('./default-model.js').createDefaultModelController>;
+    transcribeAudio?: ReturnType<typeof createCodexTranscriptionProvider>;
 }
-export declare function createSubscriptionRpcHandler({ authHandler, usageReader, resetCreditService, preferences, runtimeManagement, diagnosticsReader, modelCatalog, originalImages, resolveInheritedOriginal, closeConnections, transcriptionEnabled, transcribeAudio }: RpcHandlerOptions): (endpoint: string, input: unknown, signal: AbortSignal) => Promise<ConnectionRpcResult<unknown>>;
+export declare function createSubscriptionRpcHandler({ authHandler, usageReader, resetCreditService, preferences, defaultModel, runtimeManagement, diagnosticsReader, modelCatalog, originalImages, resolveInheritedOriginal, closeConnections, onAccountChanged, onCleanupFailure, transcriptionEnabled, transcribeAudio }: RpcHandlerOptions): (endpoint: string, input: unknown, signal: AbortSignal) => Promise<ConnectionRpcResult<unknown>>;
 export {};

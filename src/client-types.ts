@@ -7,4 +7,4 @@ export type AccountStatusController = ReturnType<typeof createAccountStatusContr
 export type SubscriptionRpcClient = ReturnType<typeof createSubscriptionRpcClient>;
 export type PreferenceState = ReturnType<PreferenceController['getSnapshot']>;
 export type AccountStatusState = ReturnType<AccountStatusController['getSnapshot']>;
-export type CodexUiProps = { preference: PreferenceController; rpc: SubscriptionRpcClient; accountStatus: AccountStatusController; t: Translate };
+export type CodexUiProps = { preference: PreferenceController; rpc: SubscriptionRpcClient; accountStatus: AccountStatusController; t: Translate; diagnostics?: ReturnType<typeof import('./diagnostic-host.js').createHostDiagnostics>; defaultModel?: ReturnType<typeof import('./default-model-controller.js').createDefaultModelController> };

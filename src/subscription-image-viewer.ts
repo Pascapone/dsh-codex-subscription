@@ -1,13 +1,13 @@
 import type { ImageEditAnnotation } from './image-edit.js';
 export type ViewerAnnotation = Omit<ImageEditAnnotation, 'number'> & { id: string };
 export type ViewerDownloadContext = { item: ViewerItem; src: string; signal: AbortSignal; onProgress(progress: { loaded: number; total: number }): void };
-export type ViewerActionContext = { item: ViewerItem; src: string; annotations: ViewerAnnotation[] };
+export type ViewerActionContext = { item: ViewerItem; src: string; annotations: ViewerAnnotation[]; mask?: Blob; option?: string };
 export type ViewerDownload = { pendingLabel?: string; errorLabel?: string; onInvoke(context: ViewerDownloadContext): unknown | Promise<unknown> };
-export type ViewerAction = Omit<ViewerDownload, 'onInvoke'> & { id: string; label: string; pendingLabel: string; errorLabel: string; closeOnSuccess: boolean; onInvoke(context: ViewerActionContext): unknown | Promise<unknown> };
+export type ViewerAction = Omit<ViewerDownload, 'onInvoke'> & { id: string; label: string; kind?: 'edit' | 'tool' | 'mask' | 'choice'; options?: { value: string; label: string }[]; pendingLabel: string; errorLabel: string; closeOnSuccess: boolean; onInvoke(context: ViewerActionContext): unknown | Promise<unknown> };
 export type ViewerItem = { id: string; src: string; name: string; width?: number; height?: number; bytes?: number; download?: ViewerDownload; actions: ViewerAction[] };
 export type ViewerRequest = { items: ViewerItem[]; index: number; opener?: HTMLElement; source: string; annotations: boolean };
 export type ViewerSnapshot = ViewerRequest & { revision: number };
-type RawAction = { onInvoke?: ViewerAction['onInvoke']; label?: string; id?: string; pendingLabel?: string; errorLabel?: string; closeOnSuccess?: unknown };
+type RawAction = { kind?: unknown; options?: unknown; onInvoke?: ViewerAction['onInvoke']; label?: string; id?: string; pendingLabel?: string; errorLabel?: string; closeOnSuccess?: unknown };
 type RawItem = { src?: string; id?: string; name?: string; width?: unknown; height?: unknown; bytes?: unknown; download?: unknown; actions?: unknown };
 // Adapted from WSL043/dsh-image-viewer 0.1.0-beta.9, MIT; see THIRD_PARTY_NOTICES.md.
 
@@ -27,6 +27,8 @@ const actionsOf = (value: unknown): ViewerAction[] => Array.isArray(value) ? (va
     pendingLabel: typeof action.pendingLabel === 'string' && action.pendingLabel !== '' ? action.pendingLabel : action.label,
     errorLabel: typeof action.errorLabel === 'string' && action.errorLabel !== '' ? action.errorLabel : action.label,
     closeOnSuccess: action.closeOnSuccess === true,
+    kind: (['tool', 'mask', 'choice'] as readonly unknown[]).includes(action.kind) ? action.kind as ViewerAction['kind'] : 'edit',
+    options: Array.isArray(action.options) ? action.options.filter(option => typeof option?.value === 'string' && typeof option?.label === 'string') : [],
     onInvoke: action.onInvoke,
   }]
 }) : []

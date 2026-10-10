@@ -5,7 +5,6 @@ export const IMAGE_SETTING_GROUPS = Object.freeze({
   imageEntryPoints: ['imageShortcut'],
   sketchCanvas: ['imageSketch'],
   sketchAgent: ['imageSketchAgent'],
-  sketchAgentPreview: ['imageSketchAgentPreview'],
   imageBrowsing: ['imageViewer', 'imageAnnotations'],
 } as const satisfies Readonly<Record<string, readonly (keyof ImageFeatures)[]>>)
 export function imageGroupValue(snapshot: Partial<ImageFeatures>, group: keyof typeof IMAGE_SETTING_GROUPS) {

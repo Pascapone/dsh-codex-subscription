@@ -4,7 +4,6 @@ import type { createSketchCommandSession } from './sketch-commands.js';
 export type SketchStudioAdapter = SketchCommandAdapter & {
     open(): void;
     changed?(state: string): void;
-    previewEnabled(): boolean;
     export(format: string): Promise<{
         blob: Blob;
         extension: string;

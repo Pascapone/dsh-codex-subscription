@@ -1,3 +1,4 @@
+import { readSubscriptionCredentials } from './subscription-credentials.js';
 import type { AuthReaders } from './model-types.js';
 export interface TranscriptionAudio { audio: Buffer<ArrayBuffer>; mime: string; filename: string }
 export const CODEX_TRANSCRIPTION_URL = 'https://chatgpt.com/backend-api/transcribe'
@@ -24,10 +25,9 @@ export function decodeTranscriptionAudio(input: unknown): TranscriptionAudio {
 export function createCodexTranscriptionProvider({ getAuth, readCredential, fetch: fetchAudio = fetch }: AuthReaders & { fetch?: typeof fetch }) {
   return async ({ audio, mime, filename }: TranscriptionAudio, signal: AbortSignal) => {
     signal.throwIfAborted()
-    const auth = await getAuth({ signal })
-    const credential = await readCredential({ signal })
-    const access = auth?.auth?.apiKey
-    if (credential?.type !== 'oauth' || typeof access !== 'string' || !access) throw new Error('ChatGPT subscription is not signed in')
+    const credential = await readSubscriptionCredentials(getAuth, readCredential, signal)
+    const access = credential.access
+    if (typeof access !== 'string' || !access) throw new Error('ChatGPT subscription is not signed in')
     const form = new FormData()
     form.append('file', new Blob([audio], { type: mime }), filename)
     // The shared proxy transport accepts bytes; Request creates the multipart boundary safely.
@@ -36,7 +36,7 @@ export function createCodexTranscriptionProvider({ getAuth, readCredential, fetc
       Authorization: `Bearer ${access}`, Origin: 'https://chatgpt.com', Referer: 'https://chatgpt.com/',
       'User-Agent': USER_AGENT, 'Content-Type': encoded.headers.get('content-type')!,
     }
-    let accountId = credential.accountId
+    let accountId: unknown = credential.accountId
     if (!accountId) {
       try { accountId = (JSON.parse(Buffer.from(access.split('.')[1], 'base64url').toString('utf8')) as { 'https://api.openai.com/auth'?: { chatgpt_account_id?: unknown } } | null)?.['https://api.openai.com/auth']?.chatgpt_account_id } catch { /* non-JWT token */ }
     }

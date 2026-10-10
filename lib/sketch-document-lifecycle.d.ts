@@ -24,7 +24,9 @@ export declare function createSketchDocumentLifecycle(state: SketchSessionState,
     replace: (next: SketchDocument, decoded: Map<string, HTMLImageElement>, identity: Pick<SketchDraft, "id" | "name"> | null) => void;
     fresh: () => Promise<void>;
     load: (row: Pick<SketchDraft, "id"> | undefined) => Promise<void>;
-    importImage: (file: File) => Promise<void>;
+    importImage: (file: File, { visible }?: {
+        visible?: boolean | undefined;
+    }) => Promise<void>;
     restore: (isCurrent?: () => boolean) => Promise<void>;
 };
 export {};

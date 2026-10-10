@@ -1,7 +1,7 @@
 import type { StreamOptions } from '@earendil-works/pi-ai';
 import type { NetworkOptions } from './network-types.js';
 import { createHash, randomUUID } from 'node:crypto'
-import { closeOpenAICodexWebSocketSessions, resetOpenAICodexWebSocketDebugStats } from '@earendil-works/pi-ai/api/openai-codex-responses'
+import { closeOpenAICodexWebSocketSessions, resetOpenAICodexWebSocketDebugStats, getOpenAICodexWebSocketDebugStats } from '@earendil-works/pi-ai/api/openai-codex-responses'
 import { headroomRouteUrl, resolveCodexOAuthProxy } from './oauth-network.js'
 
 // Keep the native protocol, continuation and pre-stream fallback. Scope its
@@ -10,6 +10,14 @@ export function createSubscriptionConnection({ resolveMode = () => 'sse', resolv
   const namespace = randomUUID()
   const sessions = new Set<string>()
   return {
+    snapshot() {
+      const totals: Record<string, number> = Object.fromEntries(['requests', 'connectionsCreated', 'connectionsReused', 'deltaRequests', 'websocketFailures', 'sseFallbacks'].map(key => [key, 0]));
+      for (const session of sessions) {
+        const stats = getOpenAICodexWebSocketDebugStats(session) as Record<string, number> | undefined;
+        for (const key of Object.keys(totals)) if (Number.isSafeInteger(stats?.[key]) && stats![key] >= 0) totals[key] = Math.min(Number.MAX_SAFE_INTEGER, totals[key] + stats![key]);
+      }
+      return totals;
+    },
     async prepare(options: StreamOptions = {}, baseUrl?: string): Promise<{ options: StreamOptions & { websocketConnectTimeoutMs?: number }; network?: NetworkOptions }> {
       const local = headroomRouteUrl(baseUrl)
       if (resolveMode() !== 'websocket') return {

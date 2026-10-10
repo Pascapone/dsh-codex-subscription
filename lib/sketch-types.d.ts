@@ -45,6 +45,7 @@ export type SketchTransform = {
 };
 export type SketchCommand = Partial<Omit<SketchStroke, 'id'>> & {
     op?: string;
+    svg?: unknown;
     action?: string;
     id?: string | number;
     layer?: number;
@@ -60,7 +61,16 @@ export type SketchCommand = Partial<Omit<SketchStroke, 'id'>> & {
     patch?: Partial<SketchStroke>;
     transform?: SketchTransform;
 };
-export type SketchRequest = {
+export type SketchCommandReport = {
+    warnings?: string[];
+    clampedPoints?: number;
+};
+export type SketchPreviewOptions = {
+    compare?: boolean;
+    grid?: boolean;
+};
+export type SketchRequest = SketchPreviewOptions & {
+    image?: string;
     action?: string;
     runId?: string;
     documentId?: string;
@@ -83,7 +93,8 @@ export type SketchCommandAdapter = {
     snapshot(): SketchSnapshot;
     document(): SketchDocument;
     commit(doc: SketchDocument): void;
-    preview(): Promise<string>;
+    preview(options?: SketchPreviewOptions): Promise<string>;
+    addReference?(image: string, name: string): Promise<unknown>;
     save(name?: string): Promise<unknown>;
     objects?(): unknown[];
     object?(id: string, layer?: number): unknown;

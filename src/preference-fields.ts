@@ -1,19 +1,25 @@
 import {
   QUICK_QUOTA_MODE_FIELD, QUICK_QUOTA_MODE_OFF, QUICK_QUOTA_MODE_PERCENT, QUICK_QUOTA_MODE_BAR, QUICK_QUOTA_MODE_FORECAST,
   SEARCH_PROVIDER_FIELD, SEARCH_PROVIDER_AUTO, SEARCH_PROVIDER_DSH, SEARCH_PROVIDER_CODEX, DEFAULT_SEARCH_PROVIDER,
-  SPEED_MODE_FIELD, SPEED_MODE_STANDARD, SPEED_MODE_FAST, DEFAULT_SPEED_MODE,
+  SPEED_MODE_FIELD, SPEED_MODE_STANDARD, SPEED_MODE_FAST, SPEED_MODE_ULTRAFAST, DEFAULT_SPEED_MODE,
   OUTPUT_VERBOSITY_FIELD, OUTPUT_VERBOSITY_DEFAULT, OUTPUT_VERBOSITY_LOW, OUTPUT_VERBOSITY_MEDIUM, OUTPUT_VERBOSITY_HIGH, DEFAULT_OUTPUT_VERBOSITY,
+  INPUT_IMAGE_DETAIL_FIELD, INPUT_IMAGE_DETAILS, DEFAULT_INPUT_IMAGE_DETAIL,
+  STREAM_IDLE_TIMEOUT_MINUTES_FIELD, STREAM_IDLE_TIMEOUT_MINUTES, DEFAULT_STREAM_IDLE_TIMEOUT_MINUTES,
   CONTEXT_MODE_FIELD, CONTEXT_MODE_STANDARD, CONTEXT_MODE_EXTENDED, CONTEXT_MODE_CUSTOM, DEFAULT_CONTEXT_MODE,
 } from './settings-contract.js'
 
 // One enum contract feeds persisted Host schemas and RPC writes.
 export const PREFERENCE_FIELDS = Object.freeze({
+  codexBasePrompt: { choices: [false, true], default: false, error: 'Invalid DSH model guidance preference' },
   compactionMode: { choices: ['dsh', 'cloud'], default: 'dsh', error: 'Invalid compaction mode' },
   connectionMode: { choices: ['sse', 'websocket'], default: 'sse', error: 'Invalid connection mode' },
+  reviewModel: { choices: ['session', 'official'], default: 'session', error: 'Invalid review model' },
   subagentBackend: { choices: ['dsh', 'codex'], default: 'dsh', error: 'Invalid subagent backend' },
   [QUICK_QUOTA_MODE_FIELD]: { choices: [QUICK_QUOTA_MODE_OFF, QUICK_QUOTA_MODE_PERCENT, QUICK_QUOTA_MODE_BAR, QUICK_QUOTA_MODE_FORECAST], error: 'Invalid quick quota preference' },
   [SEARCH_PROVIDER_FIELD]: { choices: [SEARCH_PROVIDER_AUTO, SEARCH_PROVIDER_DSH, SEARCH_PROVIDER_CODEX], default: DEFAULT_SEARCH_PROVIDER, error: 'Invalid search provider preference' },
-  [SPEED_MODE_FIELD]: { choices: [SPEED_MODE_STANDARD, SPEED_MODE_FAST], default: DEFAULT_SPEED_MODE, error: 'Invalid speed mode preference' },
+  [SPEED_MODE_FIELD]: { choices: [SPEED_MODE_STANDARD, SPEED_MODE_FAST, SPEED_MODE_ULTRAFAST], default: DEFAULT_SPEED_MODE, error: 'Invalid speed mode preference' },
   [OUTPUT_VERBOSITY_FIELD]: { choices: [OUTPUT_VERBOSITY_DEFAULT, OUTPUT_VERBOSITY_LOW, OUTPUT_VERBOSITY_MEDIUM, OUTPUT_VERBOSITY_HIGH], default: DEFAULT_OUTPUT_VERBOSITY, error: 'Invalid output verbosity preference' },
+  [INPUT_IMAGE_DETAIL_FIELD]: { choices: INPUT_IMAGE_DETAILS, default: DEFAULT_INPUT_IMAGE_DETAIL, error: 'Invalid input image detail preference' },
+  [STREAM_IDLE_TIMEOUT_MINUTES_FIELD]: { choices: STREAM_IDLE_TIMEOUT_MINUTES, default: DEFAULT_STREAM_IDLE_TIMEOUT_MINUTES, error: 'Invalid stream idle timeout preference' },
   [CONTEXT_MODE_FIELD]: { choices: [CONTEXT_MODE_STANDARD, CONTEXT_MODE_EXTENDED, CONTEXT_MODE_CUSTOM], default: DEFAULT_CONTEXT_MODE, error: 'Invalid context mode preference' },
 } as const)

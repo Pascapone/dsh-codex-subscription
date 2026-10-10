@@ -1,3 +1,4 @@
+
 import type { ModelSelectInjected } from '@deepseek-ai/dsh-client-ui-model-selection/client';
 import type { CodexUiProps } from './client-types.js';
 import type { ReactNode } from 'react';
@@ -7,7 +8,7 @@ import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } fro
 import { createPortal } from 'react-dom'
 import { BoltIcon } from '@heroicons/react/16/solid'
 import { IconCheckOutline16, IconChevronDownOutline14, IconChevronLeftOutline14, IconChevronRightOutline14, IconCloseOutline16 } from './client-primitives.js'
-import { OUTPUT_VERBOSITY_DEFAULT, OUTPUT_VERBOSITY_FIELD, OUTPUT_VERBOSITY_HIGH, OUTPUT_VERBOSITY_LOW, OUTPUT_VERBOSITY_MEDIUM, SPEED_MODE_FAST, SPEED_MODE_STANDARD, supportsCodexFastMode } from './settings-contract.js'
+import { OUTPUT_VERBOSITY_DEFAULT, OUTPUT_VERBOSITY_FIELD, OUTPUT_VERBOSITY_HIGH, OUTPUT_VERBOSITY_LOW, OUTPUT_VERBOSITY_MEDIUM, SPEED_MODE_FAST, SPEED_MODE_ULTRAFAST, SPEED_MODE_STANDARD, supportsCodexFastMode } from './settings-contract.js'
 import { fill, usePreferenceSnapshot } from './client-shared.js'
 export function CodexModelSelect({ locked, available, directory, load, select, preference, sessionId, t }: ModelProps) {
   const state = useSyncExternalStore(directory.subscribe, directory.getSnapshot)
@@ -29,6 +30,13 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
       ...(model.reasoning?.defaultEffort === undefined ? {} : { reasoningEffort: model.reasoning.defaultEffort }),
     },
   }))), [state.groups])
+  const visibleGroups = useMemo(() => {
+    const hidden = new Set(preferenceSnapshot.disabledModels)
+    // A group whose every model is hidden keeps its title, so the menu says why it is empty.
+    return state.groups.map(group => group.id === 'openai-codex'
+      ? { ...group, models: group.models.filter(model => !hidden.has(model.id)), allHidden: group.models.length > 0 && group.models.every(model => hidden.has(model.id)) }
+      : { ...group, allHidden: false }).filter(group => group.models.length > 0 || group.allHidden === true)
+  }, [state.groups, preferenceSnapshot.disabledModels])
   const currentChoice = choices.find(choice => choice.selection.provider === state.current?.provider && choice.selection.model === state.current?.model)
   const reasoning = currentChoice?.model.reasoning
   const effectiveEffort = state.current?.reasoningEffort ?? reasoning?.defaultEffort
@@ -49,6 +57,9 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
   const modelLabel = currentChoice?.model.name ?? t('selectModel')
   const speedSupported = state.current?.provider === 'openai-codex' && (preferenceSnapshot.fastModels?.includes(state.current?.model) ?? supportsCodexFastMode(state.current?.model))
   const speedWritable = preferenceSnapshot.status === 'ready' && preferenceSnapshot.writable === true
+  const ultrafastSupported = state.current?.provider === 'openai-codex' && preferenceSnapshot.ultrafastModels.includes(state.current.model)
+  const ultrafast = ultrafastSupported && preferenceSnapshot.sessionSpeedModes?.[sessionId] === SPEED_MODE_ULTRAFAST
+  const speedAvailable = speedSupported || ultrafastSupported
   const fast = speedSupported && preferenceSnapshot.sessionSpeedModes?.[sessionId] === SPEED_MODE_FAST
   const verbositySupported = state.current?.provider === 'openai-codex' && preferenceSnapshot.verbosityModels.includes(state.current?.model)
   const verbosityWritable = preferenceSnapshot.status === 'ready' && preferenceSnapshot.writable === true
@@ -83,9 +94,9 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
     return () => document.removeEventListener('pointerdown', closeOutside)
   }, [open, mobile])
   useEffect(() => {
-    if (!speedSupported && pane === 'speed') setPane('root')
+    if (!speedAvailable && pane === 'speed') setPane('root')
     if (!verbositySupported && pane === 'verbosity') setPane('root')
-  }, [pane, speedSupported, verbositySupported])
+  }, [pane, speedAvailable, verbositySupported])
   useEffect(() => {
     if (!open) return
     if (pane !== 'root') backRef.current?.focus()
@@ -164,8 +175,9 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
       {state.status === 'loading' ? <div className="codexModelSelectStatus">{t('modelsLoading')}</div> : null}
       {state.error === null ? null : <div className="codexModelSelectError"><span>{fill(t('modelFailed'), { value: state.error })}</span><button className="codexModelSelectRetry" type="button" onClick={load}>{t('modelRetry')}</button></div>}
       {state.failures.map(failure => <div className="codexModelSelectWarning" key={failure.id}>{fill(t('groupFailed'), { name: failure.name, value: failure.message })}</div>)}
-      <div className="codexModelSelectGroups scrollable">{state.groups.map(group => <section className="codexModelSelectGroup" role="group" aria-labelledby={`${id}-${group.id}`} key={group.id}>
+      <div className="codexModelSelectGroups scrollable">{visibleGroups.map(group => <section className="codexModelSelectGroup" role="group" aria-labelledby={`${id}-${group.id}`} key={group.id}>
         <div className="codexModelSelectGroupTitle" id={`${id}-${group.id}`}>{group.name}</div>
+        {group.allHidden === true ? <div className="codexModelSelectEmpty">{t('modelsHidden')}</div> : null}
         {group.models.map(model => option({
           key: model.id,
           label: model.name,
@@ -175,7 +187,7 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
           onClick: () => chooseModel({ provider: group.id, model: model.id }),
         }))}
       </section>)}</div>
-      {state.status === 'ready' && choices.length === 0 ? <div className="codexModelSelectEmpty">{t('modelsEmpty')}</div> : null}
+      {state.status === 'ready' && visibleGroups.length === 0 ? <div className="codexModelSelectEmpty">{t(choices.length === 0 ? 'modelsEmpty' : 'modelsHidden')}</div> : null}
     </div>
   } else if (pane === 'effort') {
     submenu = <div className="codexModelSelectPane">
@@ -190,8 +202,9 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
     </div>
   } else if (pane === 'speed') {
     submenu = <div className="codexModelSelectPane">
-      {option({ key: SPEED_MODE_STANDARD, label: t('speedStandard'), description: t('speedStandardHint'), selected: !fast, disabled: !speedWritable, onClick: () => chooseSpeed(SPEED_MODE_STANDARD) })}
-      {option({ key: SPEED_MODE_FAST, label: t('speedFast'), description: t(state.current?.model === 'gpt-6-astra' ? 'speedFastAstraHint' : 'speedFastHint'), selected: fast, disabled: !speedWritable, onClick: () => chooseSpeed(SPEED_MODE_FAST) })}
+      {option({ key: SPEED_MODE_STANDARD, label: t('speedStandard'), description: t('speedStandardHint'), selected: !fast && !ultrafast, disabled: !speedWritable, onClick: () => chooseSpeed(SPEED_MODE_STANDARD) })}
+      {speedSupported && option({ key: SPEED_MODE_FAST, label: t('speedFast'), description: t(state.current?.model === 'gpt-6-astra' ? 'speedFastAstraHint' : 'speedFastHint'), selected: fast && !ultrafast, disabled: !speedWritable, onClick: () => chooseSpeed(SPEED_MODE_FAST) })}
+      {ultrafastSupported && option({ key: SPEED_MODE_ULTRAFAST, label: t('speedUltrafast'), description: t('speedUltrafastHint'), selected: ultrafast, disabled: !speedWritable, onClick: () => chooseSpeed(SPEED_MODE_ULTRAFAST) })}
     </div>
   } else if (pane === 'verbosity') {
     submenu = <div className="codexModelSelectPane">
@@ -205,7 +218,7 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
     {pane === 'root' ? <>
       {cell('model', t('modelLabel'), modelLabel)}
       {reasoning === undefined ? null : cell('effort', t('effortLabel'), effortLabel)}
-      {speedSupported && cell('speed', t('speedTitle'), t(fast ? 'speedFast' : 'speedStandard'))}
+      {speedAvailable && cell('speed', t('speedTitle'), t(ultrafast ? 'speedUltrafast' : fast ? 'speedFast' : 'speedStandard'))}
       {verbositySupported && cell('verbosity', t('verbosityTitle'), verbosityLabel)}
     </> : <>
       <button ref={backRef} className="codexModelSelectBack" type="button" role="menuitem" onClick={backToRoot} aria-label={`${t('modelBack')}: ${paneTitle}`}><IconChevronLeftOutline14 />{paneTitle}</button>
@@ -237,7 +250,7 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
       disabled={locked}
       onClick={() => open ? close() : (setPane('root'), setOpen(true), load())}
     >
-      {fast && <BoltIcon className="codexModelSelectBolt" aria-hidden="true" />}
+      {(fast || ultrafast) && <BoltIcon className="codexModelSelectBolt" aria-hidden="true" />}
       <span className="codexModelSelectLabel">{modelLabel}</span>
       {effortLabel === undefined ? null : <span className="codexModelSelectEffort">{effortLabel}</span>}
       <IconChevronDownOutline14 className="codexModelSelectChevron" />
@@ -245,4 +258,3 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
     {mobile && open ? createPortal(<div className="codexModelSelectMobileLayer" role="dialog" aria-modal="true" aria-label={t('modelMenuAria')}>{menu}</div>, document.body) : menu}
   </div>
 }
-

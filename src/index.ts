@@ -1,3 +1,5 @@
+import { registerSketchCodec } from './sketch-codec-route.js';
+
 import type { Context } from '@deepseek-ai/cordis';
 import type { Dict, Volatile } from '@deepseek-ai/cosmokit';
 import type { PiAiAdapterOptions, ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai';
@@ -7,16 +9,17 @@ import type { SubscriptionProviderOptions } from './runtime-types.js';
 // ponytail: preserve legacy custom-profile retry omission for the audited SDK cohorts; widen when the adapter requires new resolved fields.
 type SubscriptionProfile = Omit<ResolvedPiAiProviderProfile, 'retryPolicy'>;
 import { createSettingsAdapter } from './settings-adapter.js'
+import { createDefaultModelController } from './default-model.js'
 import { PREFERENCE_FIELDS } from './preference-fields.js'
 import { createSubscriptionConnection } from './subscription-connection.js'
 import { createCompactionBridge } from './subscription-compaction.js'
+import { readSubscriptionCredentials } from './subscription-credentials.js'
 import { registerSubscriptionTransport } from './subscription-transport.js'
-import { createSubagentBackendSwitcher, createSubscriptionSubagent, loadSubagentRuntime } from './subagent-backend.js'
+import { createSubagentBackendSwitcher, createSubscriptionSubagent, loadSubagentRuntime, presetEntries } from './subagent-backend.js'
 import { inspectSubagentRuntime } from './subagent-runtime.js'
 import { createRuntimeManagement } from './runtime-management.js'
 import { createSketchAgentBridge } from './sketch-agent-bridge.js'
 import { createSketchAgentTool } from './sketch-agent-tool.js'
-import { registerSketchCodec } from './sketch-codec-route.js'
 import * as dshCredentials from '@deepseek-ai/dsh-credentials'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import { LlmError } from '@deepseek-ai/dsh-llm'
@@ -40,8 +43,10 @@ import { IMAGE_MODELS, DEFAULT_IMAGE_MODEL } from './image-models.js'
 import { OriginalImageStore } from './image-original-store.js'
 import { inheritedOriginalImageRef } from './image-original-contract.js'
 import { createSubscriptionDiagnostics } from './diagnostics.js'
-import { CONTEXT_MODE_FIELD, contextModelGroups, CUSTOM_CONTEXT_MODEL_CAPS, CUSTOM_CONTEXT_MODEL_DEFAULTS, CUSTOM_CONTEXT_MODEL_FIELDS, CUSTOM_CONTEXT_WINDOW_FIELD, DEFAULT_CUSTOM_CONTEXT_WINDOW, LEGACY_QUICK_QUOTA_FIELD, normalizeQuickQuotaMode, normalizeOutputVerbosity, QUICK_QUOTA_MODE_FORECAST, QUICK_QUOTA_MODE_FIELD, OUTPUT_VERBOSITY_FIELD, SEARCH_PROVIDER_AUTO, SEARCH_PROVIDER_CODEX, SEARCH_PROVIDER_FIELD, SETTINGS_NAMESPACE, SPEED_MODE_FIELD, SESSION_SPEED_MODES_FIELD, normalizeContextMode, normalizeCustomContextWindow, supportsCodexFastMode } from './settings-contract.js'
+import { createDiagnosticOperations } from './diagnostic-operations.js'
+import { AUTO_QUOTA_RETRY_FIELD, CONTEXT_MODE_FIELD, contextModelGroups, CUSTOM_CONTEXT_MODEL_CAPS, CUSTOM_CONTEXT_MODEL_DEFAULTS, CUSTOM_CONTEXT_MODEL_FIELDS, CUSTOM_CONTEXT_WINDOW_FIELD, DEFAULT_AUTO_QUOTA_RETRY, DEFAULT_CUSTOM_CONTEXT_WINDOW, DISABLED_MODELS_FIELD, INPUT_IMAGE_DETAIL_FIELD, STREAM_IDLE_TIMEOUT_MINUTES_FIELD, LEGACY_QUICK_QUOTA_FIELD, normalizeAutoQuotaRetry, normalizeDisabledModels, normalizeInputImageDetail, normalizeQuickQuotaMode, normalizeOutputVerbosity, normalizeStreamIdleTimeoutMinutes, QUICK_QUOTA_MODE_FORECAST, QUICK_QUOTA_MODE_FIELD, SESSION_SPEED_MODES_FIELD, OUTPUT_VERBOSITY_FIELD, SEARCH_PROVIDER_AUTO, SEARCH_PROVIDER_CODEX, SEARCH_PROVIDER_FIELD, SETTINGS_NAMESPACE, SPEED_MODE_FIELD, normalizeContextMode, normalizeCustomContextWindow, supportsCodexFastMode } from './settings-contract.js'
 import { createCodexUsageReader } from './usage.js'
+import { createCodexQuotaRetryHandler } from './quota-retry.js'
 import { createQuotaForecastReader } from './quota-forecast.js'
 import { QuotaForecastStateStore } from './quota-forecast-store.js'
 import { createCodexResetCreditService } from './reset-credits.js'
@@ -96,12 +101,14 @@ export function createSearchProviderSwitcher(loader: Pick<Context['loader'], 'en
 }
 
 const settingsFields = {
-  ...Object.fromEntries(Object.entries(PREFERENCE_FIELDS).map(([field, rule]: [string, { choices: readonly string[]; default?: string }]) => [field, rule.default === undefined ? z.union(rule.choices) : z.union(rule.choices).default(rule.default)])),
+  [DISABLED_MODELS_FIELD]: z.transform(z.array(z.string()).max(100), normalizeDisabledModels).default([]),
+  [AUTO_QUOTA_RETRY_FIELD]: z.boolean().default(DEFAULT_AUTO_QUOTA_RETRY),
+  ...Object.fromEntries(Object.entries(PREFERENCE_FIELDS).map(([field, rule]) => [field, 'default' in rule ? z.union(rule.choices.map(value => z.const(value))).default(rule.default) : z.union(rule.choices.map(value => z.const(value)))])),
   imageModel: z.union(Object.keys(IMAGE_MODELS)).default(DEFAULT_IMAGE_MODEL),
   imageQuality: z.union(['auto','low','medium','high','xhigh','max']).default('auto'),
   ...Object.fromEntries(Object.entries(IMAGE_FEATURE_DEFAULTS).map(([key, value]) => [key, z.boolean().default(value)])),
   // ponytail: the profile map grows with sessions; move to session-owned storage if its size becomes material.
-  [SESSION_SPEED_MODES_FIELD]: z.dict(z.union(['standard', 'fast'])).default({}),
+  [SESSION_SPEED_MODES_FIELD]: z.dict(z.union(['standard', 'fast', 'ultrafast'])).default({}),
   [CUSTOM_CONTEXT_OVERRIDES_FIELD]: z.dict(z.number().step(1).min(1).max(MAX_CONTEXT_BUDGET)).default({}),
   [SEARCH_MODE_FIELD]: z.union(SEARCH_MODES).default('live'),
   [SEARCH_DOMAINS_FIELD]: z.transform(z.array(z.string()).max(20), normalizeSearchDomains).default([]),
@@ -113,12 +120,17 @@ const settingsFields = {
   [CUSTOM_CONTEXT_WINDOW_FIELD]: z.number().step(1).min(128_000).max(1_000_000).default(DEFAULT_CUSTOM_CONTEXT_WINDOW),
   ...Object.fromEntries((Object.entries(CUSTOM_CONTEXT_MODEL_FIELDS) as [keyof typeof CUSTOM_CONTEXT_MODEL_FIELDS, string][]).map(([modelKey, field]) => [field, z.number().step(1).min(128_000).max(CUSTOM_CONTEXT_MODEL_CAPS[modelKey as keyof typeof CUSTOM_CONTEXT_MODEL_CAPS]).default(CUSTOM_CONTEXT_MODEL_DEFAULTS[modelKey as keyof typeof CUSTOM_CONTEXT_MODEL_DEFAULTS])])),
 }
-export const Config = z.object(Object.fromEntries(Object.entries(settingsFields).map(([key, field]) => [key, typeof field.volatile === 'function' ? field.volatile() : field])))
+// Schemastery before 3.18.4 has no .volatile() helper. The Host still reads
+// the same volatile metadata, so use the older public .extra() API for every
+// supported DSH cohort instead of silently exposing read-only settings.
+export const Config = z.object(Object.fromEntries(Object.entries(settingsFields).map(([key, field]) => [key, field.extra('volatile', true)])))
 
 export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {}) {
   const settings = createSettingsAdapter(ctx, z.object(settingsFields), config, SETTINGS_NAMESPACE)
   const searchProvider = createSearchProviderSwitcher(ctx.loader)
   const network = createCodexNetworkTransport()
+  const diagnosticOperations = createDiagnosticOperations()
+  ctx.effect(() => ctx.on?.('tools/result', (exec, result) => { diagnosticOperations.tool(exec, result); return undefined }), 'codex-subscription: operation evidence')
   const originalImages = new OriginalImageStore()
   const accountVault = ACCOUNT_VAULT_KEY !== undefined
     && typeof ctx.credentials.readRecord === 'function'
@@ -143,7 +155,9 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
     selectDsh: async () => { if (subagentBackend) await subagentBackend.select('dsh'); else await settings.update({ subagentBackend: 'dsh' }) },
   })
   ctx.effect(() => ctx.on?.('plugin-manager/install-state', value => runtimeManagement.progress(value)))
+  let notifyModelsUpdated = () => {}
   const modelCatalog = createOfficialModelCatalog({
+    onUpdated: () => notifyModelsUpdated(),
     getAuth: options => resolveAuth(options),
     readCredential: options => store.read(PROVIDER, options),
     baseModels: () => baseProvider.getModels(),
@@ -154,15 +168,17 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
     const prompt = settings.get().codexBasePrompt === true && assembled.variables.provider === PROVIDER
       ? modelCatalog.basePrompt(assembled.variables.model!) : undefined
     return prompt ? { ...assembled, sections: [...assembled.sections, { name: 'codex-subscription/base-prompt', text: prompt, interpolate: false }] } : assembled
-  }, { prepend: true }), 'codex-subscription: optional model base prompt'))
-  const connection = createSubscriptionConnection({ resolveMode: () => settings.get().connectionMode as 'sse' | 'websocket' })
+  }, { prepend: true }), 'codex-subscription: optional model guidance'))
+  const connection = createSubscriptionConnection({ resolveMode: () => settings.get().connectionMode === 'websocket' ? 'websocket' : 'sse' })
+  // The settings surface edits DSH's own default model instead of keeping a
+  // second copy, so every new conversation opens on what the user selected.
+  const defaultModel = createDefaultModelController({
+    resolveService: () => ctx.get?.('agentDefaultModel'),
+    listModels: () => modelCatalog.getModels().map(model => model.id),
+  })
   const compaction = createCompactionBridge({
     enabled: () => settings.get().compactionMode === 'cloud',
-    accountScope: async () => {
-      await resolveAuth()
-      const credential = await store.read(PROVIDER)
-      return credential?.type === 'oauth' ? credential.accountId : undefined
-    },
+    accountScope: options => readSubscriptionCredentials(resolveAuth, request => store.read(PROVIDER, request), options.signal),
   })
   ctx.effect(() => () => connection.dispose())
   const provider = openaiCodexSubscriptionProvider({
@@ -171,6 +187,7 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
     resolveRoute: request => (ctx.get?.('headroomRoute') as { resolve?: NonNullable<SubscriptionProviderOptions['resolveRoute']> } | undefined)?.resolve?.(request),
     resolveSpeedMode: sessionId => settings.get()[SESSION_SPEED_MODES_FIELD]?.[sessionId!] as SpeedMode | undefined,
     resolveOutputVerbosity: () => normalizeOutputVerbosity(settings.get()[OUTPUT_VERBOSITY_FIELD]),
+    resolveInputImageDetail: () => settings.get()[INPUT_IMAGE_DETAIL_FIELD],
     resolveContextMode: () => normalizeContextMode(settings.get()[CONTEXT_MODE_FIELD]),
     resolveCustomContextWindow: modelKey => {
       const overrides = readCapabilitySettings(settings.get())[CUSTOM_CONTEXT_OVERRIDES_FIELD]
@@ -179,36 +196,48 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
       if (field === undefined) return undefined
       return normalizeCustomContextWindow(settings.get()[field] ?? CUSTOM_CONTEXT_MODEL_DEFAULTS[modelKey as keyof typeof CUSTOM_CONTEXT_MODEL_DEFAULTS], CUSTOM_CONTEXT_MODEL_CAPS[modelKey as keyof typeof CUSTOM_CONTEXT_MODEL_CAPS])
     },
+    resolveReviewModel: () => settings.get().reviewModel,
     catalog: modelCatalog,
     runNetwork: network.run,
   })
   const preferences = {
-    status: () => ({
-      compactionMode: settings.get().compactionMode ?? 'dsh',
-      connectionMode: settings.get().connectionMode ?? 'sse',
-      subagentBackend: settings.get().subagentBackend ?? 'dsh',
-      subagentBackendAvailable: subagentBackend !== undefined,
-      subagentRuntimeInstalled: inspectSubagentRuntime().installed,
-      ...readCapabilitySettings(settings.get()),
-      [QUICK_QUOTA_MODE_FIELD]: normalizeQuickQuotaMode(
-        settings.get()[QUICK_QUOTA_MODE_FIELD],
-        settings.get()[LEGACY_QUICK_QUOTA_FIELD],
-      ),
-      codexBasePrompt: settings.get().codexBasePrompt === true,
-      [SEARCH_PROVIDER_FIELD]: settings.get()[SEARCH_PROVIDER_FIELD],
-      [SPEED_MODE_FIELD]: settings.get()[SPEED_MODE_FIELD],
-      [SESSION_SPEED_MODES_FIELD]: settings.get()[SESSION_SPEED_MODES_FIELD] ?? {},
-      [OUTPUT_VERBOSITY_FIELD]: normalizeOutputVerbosity(settings.get()[OUTPUT_VERBOSITY_FIELD]),
-      [CONTEXT_MODE_FIELD]: normalizeContextMode(settings.get()[CONTEXT_MODE_FIELD]),
-      [CUSTOM_CONTEXT_WINDOW_FIELD]: normalizeCustomContextWindow(settings.get()[CUSTOM_CONTEXT_WINDOW_FIELD]),
-      ...Object.fromEntries((Object.entries(CUSTOM_CONTEXT_MODEL_FIELDS) as [keyof typeof CUSTOM_CONTEXT_MODEL_FIELDS, string][]).map(([modelKey, field]) => [field, normalizeCustomContextWindow(settings.get()[field] ?? CUSTOM_CONTEXT_MODEL_DEFAULTS[modelKey as keyof typeof CUSTOM_CONTEXT_MODEL_DEFAULTS], CUSTOM_CONTEXT_MODEL_CAPS[modelKey as keyof typeof CUSTOM_CONTEXT_MODEL_CAPS])])),
-      contextModels: contextModelGroups(modelCatalog.getModels(baseProvider.getModels())),
-      catalogStatus: modelCatalog.status(),
-      verbosityModels: provider.getModels().filter(model => modelCatalog.metadata(model.id)?.supportVerbosity ?? model.id !== 'gpt-5.3-codex-spark').map(model => model.id),
-      fastModels: provider.getModels().filter(model => modelCatalog.metadata(model.id)?.supportsFast ?? supportsCodexFastMode(model.id)).map(model => model.id),
-      writable: ctx.settings.writable,
-    }),
     setSpeed: (sessionId: string, speedMode: SpeedMode) => settings.setSessionSpeed(sessionId, speedMode),
+    status: () => {
+      const models = modelCatalog.getModels()
+      return {
+        [DISABLED_MODELS_FIELD]: normalizeDisabledModels(settings.get()[DISABLED_MODELS_FIELD]),
+        [AUTO_QUOTA_RETRY_FIELD]: normalizeAutoQuotaRetry(settings.get()[AUTO_QUOTA_RETRY_FIELD]),
+        compactionMode: settings.get().compactionMode ?? 'dsh',
+        connectionMode: settings.get().connectionMode ?? 'sse',
+        reviewModel: settings.get().reviewModel ?? 'session',
+        subagentBackend: settings.get().subagentBackend ?? 'dsh',
+        subagentBackendAvailable: subagentBackend !== undefined,
+        subagentRuntimeInstalled: inspectSubagentRuntime().installed,
+        ...readCapabilitySettings(settings.get()),
+        [QUICK_QUOTA_MODE_FIELD]: normalizeQuickQuotaMode(
+          settings.get()[QUICK_QUOTA_MODE_FIELD],
+          settings.get()[LEGACY_QUICK_QUOTA_FIELD],
+        ),
+        [SEARCH_PROVIDER_FIELD]: settings.get()[SEARCH_PROVIDER_FIELD],
+        [SPEED_MODE_FIELD]: settings.get()[SPEED_MODE_FIELD],
+        [SESSION_SPEED_MODES_FIELD]: settings.get()[SESSION_SPEED_MODES_FIELD],
+        codexBasePrompt: settings.get().codexBasePrompt === true,
+        autoQuotaRetryAvailable: !ctx.get?.('robust'),
+        [OUTPUT_VERBOSITY_FIELD]: normalizeOutputVerbosity(settings.get()[OUTPUT_VERBOSITY_FIELD]),
+        [INPUT_IMAGE_DETAIL_FIELD]: normalizeInputImageDetail(settings.get()[INPUT_IMAGE_DETAIL_FIELD]),
+        [STREAM_IDLE_TIMEOUT_MINUTES_FIELD]: normalizeStreamIdleTimeoutMinutes(settings.get()[STREAM_IDLE_TIMEOUT_MINUTES_FIELD]),
+        [CONTEXT_MODE_FIELD]: normalizeContextMode(settings.get()[CONTEXT_MODE_FIELD]),
+        [CUSTOM_CONTEXT_WINDOW_FIELD]: normalizeCustomContextWindow(settings.get()[CUSTOM_CONTEXT_WINDOW_FIELD]),
+        ...Object.fromEntries(Object.entries(CUSTOM_CONTEXT_MODEL_FIELDS).map(([modelKey, field]) => [field, normalizeCustomContextWindow(settings.get()[field] ?? CUSTOM_CONTEXT_MODEL_DEFAULTS[modelKey as keyof typeof CUSTOM_CONTEXT_MODEL_DEFAULTS], CUSTOM_CONTEXT_MODEL_CAPS[modelKey as keyof typeof CUSTOM_CONTEXT_MODEL_CAPS])])),
+        contextModels: contextModelGroups(models),
+        availableModels: models.map(({ id, name }) => ({ id, name })),
+        catalogStatus: modelCatalog.status(),
+        verbosityModels: provider.getModels().filter(model => modelCatalog.metadata(model.id)?.supportVerbosity ?? model.id !== 'gpt-5.3-codex-spark').map(model => model.id),
+        ultrafastModels: provider.getModels().filter(model => modelCatalog.metadata(model.id)?.supportsUltrafast === true).map(model => model.id),
+        fastModels: provider.getModels().filter(model => modelCatalog.metadata(model.id)?.supportsFast ?? supportsCodexFastMode(model.id)).map(model => model.id),
+        writable: ctx.settings.writable,
+      }
+    },
     update: async (patch: Record<string, unknown>) => {
       if (Object.hasOwn(patch, 'subagentBackend')) {
         if (!subagentBackend) throw new Error('DSH subagent services are unavailable')
@@ -219,10 +248,10 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
       if (Object.keys(rest).length) await settings.update(rest)
     },
   }
-
   const authModels = createModels({ credentials: store })
   authModels.setProvider(provider)
   const profile = Object.freeze<SubscriptionProfile>({
+    streamIdleTimeoutMs: normalizeStreamIdleTimeoutMinutes(settings.get()[STREAM_IDLE_TIMEOUT_MINUTES_FIELD]) * 60 * 1000,
     provider: PROVIDER,
     displayName: 'ChatGPT subscription',
     piProvider: provider,
@@ -230,8 +259,7 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
     // Custom PiAiAdapter profiles bypass the settings-backed profile resolver,
     // so the model diagnostics the host adapter reads on resolution must be
     // present here rather than left undefined.
-    modelErrors: new Map<string, string>(),
-    streamIdleTimeoutMs: 10 * 60 * 1000,
+    modelErrors: new Map(),
     // Custom PiAiAdapter profiles bypass the settings-backed profile resolver,
     // so request-image limits must be complete here rather than left undefined.
     maxRequestImageBytes: MAX_REQUEST_IMAGE_BYTES,
@@ -246,10 +274,12 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
   let profileKey: string | undefined
   let profileSnapshot: Map<string, SubscriptionProfile> | undefined
   const profiles = () => {
-    const key = JSON.stringify([modelCatalog.revision(), normalizeContextMode(settings.get()[CONTEXT_MODE_FIELD]), settings.get()[CUSTOM_CONTEXT_OVERRIDES_FIELD], ...Object.values(CUSTOM_CONTEXT_MODEL_FIELDS).map(field => settings.get()[field])])
+    const preferences = settings.get()
+    const streamIdleTimeoutMinutes = normalizeStreamIdleTimeoutMinutes(preferences[STREAM_IDLE_TIMEOUT_MINUTES_FIELD])
+    const key = JSON.stringify([modelCatalog.revision(), streamIdleTimeoutMinutes, normalizeContextMode(preferences[CONTEXT_MODE_FIELD]), preferences[CUSTOM_CONTEXT_OVERRIDES_FIELD], ...Object.values(CUSTOM_CONTEXT_MODEL_FIELDS).map(field => preferences[field])])
     if (key !== profileKey) {
       profileKey = key
-      profileSnapshot = new Map([[PROVIDER, profile]])
+      profileSnapshot = new Map([[PROVIDER, Object.freeze({ ...profile, streamIdleTimeoutMs: streamIdleTimeoutMinutes * 60 * 1000 })]])
     }
     return profileSnapshot!
   }
@@ -264,7 +294,7 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
     })
     scoped.subagents.registerProvider(instance.provider)
     const switcher = createSubagentBackendSwitcher({
-      entries: () => scoped.loader.entries(), prepare: instance.prepare,
+      entries: () => [...scoped.loader.entries(), ...presetEntries(scoped)], prepare: instance.prepare,
       persist: mode => settings.update({ subagentBackend: mode }),
     })
     // Web presets mount their scoped tool rows lazily, after the settings page.
@@ -309,7 +339,7 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
   }))), 'codex-subscription: image tool availability')
   const adapter = new PiAiAdapter({
     profiles: profiles as unknown as PiAiAdapterOptions['profiles'],
-    resolveApiKey: async () => {
+    resolveApiKey: () => compaction.resolveApiKey(async () => {
       let resolved
       try {
         resolved = await resolveAuth()
@@ -320,11 +350,12 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
         throw new LlmError('ChatGPT subscription is not signed in', 'MISSING_CREDENTIAL')
       }
       return resolved.auth.apiKey
-    },
+    }),
     auth: adapterAuth,
     resolveAttachments: () => ctx.get?.('attachments'),
   })
-  ctx.llm.registerAdapter([PROVIDER], compaction.wrapAdapter(adapter))
+  const registration = ctx.llm.registerAdapter([PROVIDER], compaction.wrapAdapter(adapter))
+  notifyModelsUpdated = () => registration.replace([PROVIDER])
   const currentAgent = () => ctx.get?.('agents')?.currentInitiator?.()
   const codexSearch = createCodexSearchProvider({
     resolvePreferences: () => readCapabilitySettings(settings.get()),
@@ -365,6 +396,7 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
     },
   })
   const coordinator = new CodexLoginCoordinator(auth)
+  ctx.effect(() => () => coordinator.dispose(), 'codex-subscription: login lifecycle')
   const baseUsageReader = createCodexUsageReader({
     getAuth: resolveAuth,
     readCredential: options => store.read(PROVIDER, options),
@@ -397,6 +429,29 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
       usageReader.clearCache()
     }
   }, 'codex-subscription: quota forecast warm-up')
+  const quotaRetryLifetime = new AbortController()
+  const activeQuotaRetries = new Set<Promise<{ kind: 'retry' } | undefined>>()
+  const quotaRetryHandler = createCodexQuotaRetryHandler({
+    usageReader,
+    // Robust owns all automatic request recovery when installed; never stack retry loops.
+    enabled: () => !ctx.get?.('robust') && normalizeAutoQuotaRetry(settings.get()[AUTO_QUOTA_RETRY_FIELD]),
+  })
+  const disposeQuotaRetry = ctx.on('agent/request-error', (payload, next) => {
+    if (quotaRetryLifetime.signal.aborted) return Promise.resolve(undefined)
+    const signal = payload.signal === undefined
+      ? quotaRetryLifetime.signal
+      : AbortSignal.any([payload.signal, quotaRetryLifetime.signal])
+    const operation = quotaRetryHandler({ ...payload, signal }, next)
+    const tracked = operation.finally(() => activeQuotaRetries.delete(tracked))
+    activeQuotaRetries.add(tracked)
+    return tracked
+  })
+  ctx.effect(() => async () => {
+    disposeQuotaRetry()
+    quotaRetryLifetime.abort(new Error('codex-subscription quota retry disposed'))
+    await Promise.allSettled([...activeQuotaRetries])
+  }, 'codex-subscription: abort and drain quota recovery')
+  ctx.effect(() => settings.watch(() => quotaRetryHandler.notifyConfigurationChanged()), 'codex-subscription: update quota recovery preference')
   const resetCreditService = createCodexResetCreditService({
     getAuth: resolveAuth,
     readCredential: options => store.read(PROVIDER, options),
@@ -408,7 +463,7 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
     let dispose: (() => void) | undefined
     const sync=()=>{
       const value=settings.get()
-      if(value.imageSketchAgent && value.imageSketch && value.imageEditing){dispose??=ctx.tools.register(createSketchAgentTool(sketchBridge,ctx.attachments))}
+      if(value.imageSketchAgent && value.imageSketch && value.imageEditing){dispose??=ctx.tools.register(createSketchAgentTool(sketchBridge,ctx.attachments,sessionId=>ctx.get?.('sessions')?.get?.(sessionId)?.deriveMessages?.()??[]))}
       else {dispose?.();dispose=undefined;sketchBridge.dispose()}
     }
     sync();const unwatch=settings.watch(sync)
@@ -419,14 +474,16 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
     usageReader,
     resetCreditService,
     preferences,
-    runtimeManagement,
     transcriptionEnabled: () => settings.get().transcriptionEnabled === true,
     transcribeAudio: createCodexTranscriptionProvider({
-      getAuth: resolveAuth,
-      readCredential: options => store.read(PROVIDER, options),
+      getAuth: resolveAuth, readCredential: options => store.read(PROVIDER, options),
       fetch: (input, init) => network.fetch('transcription', input, init),
     }),
-    diagnosticsReader: () => createSubscriptionDiagnostics({ auth, preferences, login: coordinator.supportState(), network, modelCatalog }),
+    defaultModel,
+    runtimeManagement,
+    onAccountChanged: quotaRetryHandler.notifyAccountChanged,
+    diagnosticsReader: () => createSubscriptionDiagnostics({ auth, preferences, login: coordinator.supportState(), network, modelCatalog, connection, compaction, review: provider, operations: diagnosticOperations, runtimeManagement, storage: () => usageReader.storage(), tools: ctx.tools }),
+    onCleanupFailure: () => diagnosticOperations.record('account/cleanup', 'failed'),
     modelCatalog,
     closeConnections: () => connection.dispose(),
     originalImages,
@@ -436,18 +493,19 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
     ),
   })
 
-  const handler=(endpoint: string,payload: unknown,signal: AbortSignal)=>endpoint.startsWith('sketch/')?sketchBridge.rpc(endpoint,payload):subscriptionHandler(endpoint,payload,signal)
-  // Cordis 4.0.4 accepts nullable side effects; its declaration requires a disposer.
-  ctx.effect(((): undefined => {
-    void modelCatalog.refresh().catch(error => ctx.logger?.debug?.('could not refresh Codex model catalog: %s', (error as Error).message))
-  }) as unknown as Parameters<Context['effect']>[0], 'codex-subscription: official model catalog')
+  const handler=diagnosticOperations.wrap((endpoint,payload,signal)=>endpoint.startsWith('sketch/')?sketchBridge.rpc(endpoint,payload):subscriptionHandler(endpoint,payload,signal))
+  ctx.effect(() => {
+    const controller = new AbortController()
+    void modelCatalog.refresh({ signal: controller.signal }).catch(error => ctx.logger?.debug?.('could not refresh Codex model catalog: %s', error.message))
+    return () => controller.abort()
+  }, 'codex-subscription: official model catalog')
 
   ctx.inject(['connection'], connectionContext => connectionContext.effect(
     () => {
-      const transport=registerSubscriptionTransport(connectionContext.connection, handler)
+      const transport = registerSubscriptionTransport(connectionContext.connection, handler)
       let codec: (() => void) | undefined
-      try{codec=registerSketchCodec(connectionContext.connection)}catch(error){transport();throw error}
-      return ()=>{codec();transport()}
+      try { codec = registerSketchCodec(connectionContext.connection) } catch (error) { transport(); throw error }
+      return () => { codec?.(); transport() }
     },
     'codex-subscription: DSH-trusted account RPC',
   ))
@@ -456,6 +514,7 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
 export { createCodexAuthService, DshOAuthCredentialStore } from './credential-store.js'
 export { createSubscriptionDiagnostics } from './diagnostics.js'
 export { normalizeContextMode, normalizeCustomContextWindow } from './settings-contract.js'
+export { createDefaultModelController, DEFAULT_MODEL_PROVIDER } from './default-model.js'
 export { assertCodexAuthUrl, commandForCodexAuthUrl, openCodexAuthUrl } from './external-url.js'
 export { CodexLoginCoordinator, createCodexRpcHandler } from './login-coordinator.js'
 export { CODEX_USAGE_URL, createCodexUsageReader, parseCodexUsage } from './usage.js'

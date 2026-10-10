@@ -44,7 +44,23 @@ export type SketchTaskDelivery = {
     request: SketchRequest;
     expiresAt: number;
 };
+export type DefaultModelStatus = {
+    available: boolean;
+    managed: boolean;
+    provider?: string;
+    model?: string;
+    reasoningEffort?: string;
+};
+export type StorageStatus = {
+    bytes: number;
+    limit: number;
+    readable?: boolean;
+};
 export type RpcResponseMap = {
+    'default-model/status': DefaultModelStatus;
+    'default-model/select': DefaultModelStatus;
+    'storage/status': StorageStatus;
+    'storage/clear-forecast': StorageStatus;
     status: AccountStatusView;
     logout: AccountStatusView;
     'account/select': AccountStatusView;
@@ -54,7 +70,7 @@ export type RpcResponseMap = {
     'login/submit': LoginFlow;
     'login/cancel': LoginFlow;
     usage: ForecastUsage;
-    diagnostics: Record<string, unknown>;
+    diagnostics: import('./diagnostic-types.js').DiagnosticReport;
     'preferences/status': Record<string, unknown>;
     'preferences/models': Record<string, unknown>;
     'preferences/update': Record<string, unknown>;

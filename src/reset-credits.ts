@@ -1,5 +1,6 @@
 import type { AuthResult, Credential } from '@earendil-works/pi-ai';
 import type { ResetOptions, ResetCredit, ResetDetails, ResetResult, ResetChallenge } from './reset-types.js';
+import { readSubscriptionCredentials } from './subscription-credentials.js'
 import { randomUUID as nodeRandomUUID } from 'node:crypto'
 
 import { USER_AGENT } from './version.js'
@@ -26,9 +27,7 @@ function safeCopy(value: unknown): string | undefined {
     : undefined
 }
 
-function credentialsOf(auth: AuthResult | undefined, credential: Credential | undefined): { access: string; accountId: string } {
-  const access = auth?.auth?.apiKey
-  const accountId = credential?.type === 'oauth' ? credential.accountId : undefined
+function credentialsOf({ access, accountId }: Awaited<ReturnType<typeof readSubscriptionCredentials>>) {
   if (typeof access !== 'string' || access.length === 0
     || typeof accountId !== 'string' || accountId.length === 0) {
     throw new Error('ChatGPT subscription is not signed in')
@@ -125,14 +124,11 @@ export function createCodexResetCreditService(options: ResetOptions) {
     ...(credit.creditExpiresAt === undefined ? {} : { expiresAt: credit.creditExpiresAt }),
   })
 
-  const resolveCredentials = async (signal?: AbortSignal) => credentialsOf(
-    await getAuth({ signal }),
-    await readCredential({ signal }),
-  )
+  const resolveCredentials = async (signal?: AbortSignal) => credentialsOf(await readSubscriptionCredentials(getAuth, readCredential, signal))
 
   const readDetails = async (signal: AbortSignal | undefined, credentials?: { access: string; accountId: string }) => {
     const { access, accountId } = credentials ?? await resolveCredentials(signal)
-    const response = await fetchReset(CODEX_RESET_CREDITS_URL, {
+    const response: Response = await fetchReset(CODEX_RESET_CREDITS_URL, {
       method: 'GET',
       redirect: 'error',
       headers: {

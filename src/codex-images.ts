@@ -1,3 +1,4 @@
+declare module '@deepseek-ai/dsh-llm' { interface MessageSourceMap { 'codex-subscription-image': { kind: 'codex-subscription-image' } } }
 import type { AttachmentStore, AttachmentIdType, ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment';
 import type { ContentBlock } from '@deepseek-ai/dsh-llm';
 import type { ToolDefinition, ToolRunContext, ValueSchemaSpec, InferValue } from '@deepseek-ai/dsh-tools';
@@ -8,6 +9,7 @@ type JsonImageRef = Omit<ImageAttachmentRef, 'attachmentId'> & { attachmentId: s
 type SessionMessages = readonly { content?: unknown }[];
 interface ImageToolOptions extends AuthReaders { fetch?: typeof fetch; attachments: AttachmentPort; originalImages: Pick<OriginalImageStore, 'save' | 'remove' | 'originalPath'>; getFeatures?: () => Parameters<typeof readImageDefaults>[0]; getSessionMessages?: (id: NonNullable<ToolRunContext['agent']>['id'] | undefined) => SessionMessages | undefined | Promise<SessionMessages | undefined> }
 type ImageContentValue = { image: JsonImageRef; size?: string; localPath?: string };
+import { readSubscriptionCredentials } from './subscription-credentials.js'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { ORIGINAL_IMAGE_SCHEMA_VERSION } from './image-original-contract.js'
@@ -30,6 +32,29 @@ const FILE_NAME_ATTACHMENT_ID = /\.[A-Za-z0-9]{1,16}$/u
 
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
 const nonEmpty = (value: unknown) => typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+
+const NETWORK_REASONS: Record<string, string> = {
+  UND_ERR_HEADERS_TIMEOUT: 'the image service sent no response within 5 minutes',
+  UND_ERR_BODY_TIMEOUT: 'the image response stalled',
+  UND_ERR_CONNECT_TIMEOUT: 'the connection to the image service timed out',
+  UND_ERR_SOCKET: 'the connection closed unexpectedly',
+  ECONNRESET: 'the connection was reset',
+  ETIMEDOUT: 'the connection timed out',
+  ENOTFOUND: 'DNS lookup failed',
+  ECONNREFUSED: 'the connection was refused',
+  EAI_AGAIN: 'DNS lookup failed',
+}
+
+// A network-level failure carries no HTTP status, so say what the transport reported.
+// Only a bounded error code is shown; no URL, header, or body can leak through it.
+export function requestFailureReason(input: unknown) {
+  const error = input as { code?: unknown; name?: unknown; cause?: { code?: unknown } } | undefined;
+  const source = error?.cause ?? error
+  const code = [source?.code, error?.code].find((value): value is string => typeof value === 'string' && /^[A-Z][A-Z0-9_]{2,39}$/u.test(value))
+  if (code !== undefined) return `: ${NETWORK_REASONS[code] ?? 'network error'} (${code})`
+  if (error?.name === 'TimeoutError') return ': the image request timed out'
+  return ''
+}
 
 export function normalizeImageOptions(args: { quality?: unknown; background?: unknown; size?: unknown; model?: unknown } | null | undefined) {
   const quality = nonEmpty(args?.quality) ?? 'auto'
@@ -174,6 +199,16 @@ function sessionImageReferences(messages: SessionMessages | undefined) {
   }
   for (const message of messages ?? []) visit(message?.content)
   return references
+}
+
+// One image the user attached to this session, resolved from its attachmentId like an edit reference.
+export async function readSessionImage(attachmentId: unknown, attachments: AttachmentPort, signal: AbortSignal | undefined, messages: SessionMessages) {
+  const id = normalizeAttachmentId(attachmentId)
+  if (id === undefined) invalidAttachmentId({ attachmentId })
+  const selected = sessionImageReferences(messages).get(id)
+  if (selected === undefined) throw new Error('The selected image attachment cannot be found in the current session. Copy attachmentId from the image block of the user message; never pass a path or filename.')
+  const stored = await attachments.readImage(referenceOf(selected, attachments), signal)
+  return { data: stored.data, mediaType: stored.ref.mediaType, name: stored.ref.name }
 }
 
 async function editImages(values: unknown, attachments: AttachmentPort, signal: AbortSignal, messages: SessionMessages | undefined) {
@@ -365,10 +400,7 @@ export function createCodexImageTool(options: ImageToolOptions): ToolDefinition 
       const prompt = nonEmpty(args.prompt)
       if (prompt === undefined) throw new Error('prompt must be a non-empty string')
       const imageOptions = normalizeImageOptions(args)
-      const auth = await options.getAuth({ signal: exec.signal })
-      const credential = await options.readCredential({ signal: exec.signal })
-      const access = auth?.auth?.apiKey
-      const accountId = credential?.type === 'oauth' ? credential.accountId : undefined
+      const { access, accountId } = await readSubscriptionCredentials(options.getAuth, options.readCredential, exec.signal)
       if (typeof access !== 'string' || access.length === 0
         || typeof accountId !== 'string' || accountId.length === 0) {
         throw new Error('ChatGPT subscription is not signed in')
@@ -414,7 +446,7 @@ export function createCodexImageTool(options: ImageToolOptions): ToolDefinition 
         })
       } catch (error) {
         if (exec.signal.aborted) throw exec.signal.reason
-        throw new Error(`Codex image ${editing ? 'edit' : 'generation'} request failed`, { cause: error })
+        throw new Error(`Codex image ${editing ? 'edit' : 'generation'} request failed${requestFailureReason(error)}`, { cause: error })
       }
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
@@ -452,13 +484,15 @@ export function createCodexImageTool(options: ImageToolOptions): ToolDefinition 
         localPath: options.originalImages.originalPath(original.assetId),
         ...(metadata.background === undefined ? {} : { background: metadata.background }),
         ...(metadata.quality === undefined ? {} : { quality: metadata.quality }),
-        ...(metadata.size === undefined ? {} : { size: metadata.size }),
+        // The service can return different dimensions from the requested size
+        // or its response metadata. Report the persisted original's dimensions.
+        size: `${original.width}x${original.height}`,
       }
       if (exec.parent !== undefined) {
         exec.deferContext(createUserMessage({
           content: imageContent(result),
-          // Preserve the historical plugin source across the supported SDK cohorts.
-          source: { kind: 'plugin', plugin: 'codex-subscription' } as unknown as Parameters<typeof createUserMessage>[0]['source'],
+          // The host has no shared catch-all kind: a producer declares its own.
+          source: { kind: 'codex-subscription-image' },
         }))
       }
       return result as InferValue<ReturnType<typeof imageOutputSchema>>

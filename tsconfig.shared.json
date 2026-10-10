@@ -1,7 +1,10 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "lib": ["ES2023", "DOM"],
+    "lib": [
+      "ES2023",
+      "DOM"
+    ],
     "types": [],
     "noEmit": false,
     "declaration": true,
@@ -38,6 +41,35 @@
     "src/preference-controller.ts",
     "src/preference-types.ts",
     "src/image-edit.ts",
-    "src/sketch-types.ts", "src/sketch-document.ts", "src/sketch-brushes.ts", "src/sketch-text.ts", "src/sketch-input.ts", "src/sketch-curves.ts", "src/sketch-layers.ts", "src/sketch-objects.ts", "src/sketch-presets.ts", "src/sketch-gesture.ts", "src/sketch-layer-renderer.ts", "src/sketch-shortcuts.ts", "src/sketch-commands.ts", "src/sketch-drafts.ts", "src/sketch-agent-run.ts", "src/sketch-formats.ts", "src/sketch-session-state.ts", "src/sketch-document-lifecycle.ts", "src/subscription-image-viewer.ts", "src/sketch-agent-export.ts"
+    "src/sketch-types.ts",
+    "src/sketch-document.ts",
+    "src/sketch-brushes.ts",
+    "src/sketch-text.ts",
+    "src/sketch-input.ts",
+    "src/sketch-curves.ts",
+    "src/sketch-layers.ts",
+    "src/sketch-objects.ts",
+    "src/sketch-presets.ts",
+    "src/sketch-gesture.ts",
+    "src/sketch-layer-renderer.ts",
+    "src/sketch-shortcuts.ts",
+    "src/sketch-commands.ts",
+    "src/sketch-drafts.ts",
+    "src/sketch-agent-run.ts",
+    "src/sketch-formats.ts",
+    "src/sketch-session-state.ts",
+    "src/sketch-document-lifecycle.ts",
+    "src/subscription-image-viewer.ts",
+    "src/sketch-agent-export.ts",
+    "src/credit-expiry.ts",
+    "src/default-model-controller.ts",
+    "src/diagnostic-checks.ts",
+    "src/diagnostic-evidence.ts",
+    "src/diagnostic-capabilities.ts",
+    "src/diagnostic-summary.ts",
+    "src/diagnostic-compact.ts",
+    "src/picker-draft.ts",
+    "src/sketch-preview.ts",
+    "src/sketch-svg.ts"
   ]
 }

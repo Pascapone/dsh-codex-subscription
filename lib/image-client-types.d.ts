@@ -7,7 +7,7 @@ export type ImageClientProps = Pick<CodexUiProps, 'preference' | 't' | 'rpc'> & 
     sessionId: string;
     loadImage: MessageImageLoader;
     openSketchImage?(src: string, name: string): unknown | Promise<unknown>;
-    attachForEdit(src: string, name: string, draft: string, annotations?: readonly ImageEditAnnotation[], referenceName?: string, sourceInDraft?: boolean): unknown | Promise<unknown>;
+    attachForEdit(src: string, name: string, draft: string, annotations?: readonly ImageEditAnnotation[], referenceName?: string, sourceInDraft?: boolean, extraFiles?: readonly File[]): unknown | Promise<unknown>;
     getImageViewer?(): Pick<SubscriptionImageViewer, 'open'> | undefined;
     getInternalImageViewer?(): SubscriptionImageViewer | undefined;
 };

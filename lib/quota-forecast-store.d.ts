@@ -9,4 +9,8 @@ export declare class QuotaForecastStateStore {
     load(): Promise<ForecastState | undefined>;
     save(state: unknown): Promise<void>;
     clear(): Promise<void>;
+    usage(): Promise<{
+        bytes: number;
+        limit: number;
+    }>;
 }

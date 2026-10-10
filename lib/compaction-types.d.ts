@@ -6,7 +6,13 @@ export interface CodexPayload extends Record<string, unknown> {
 export interface CompactionOptions {
     enabled?: () => boolean;
     threshold?: () => number;
-    accountScope(options: GenerateOptions): unknown | Promise<unknown>;
+    accountScope(options: GenerateOptions): {
+        access?: string;
+        accountId?: string;
+    } | Promise<{
+        access?: string;
+        accountId?: string;
+    }>;
     diagnostic?: (status: {
         completed: boolean;
         captured: number;
@@ -15,12 +21,14 @@ export interface CompactionOptions {
     now?: () => number;
 }
 export interface CompactionState {
+    access: string;
     identity: string;
     original: RequestMessage[];
     blocks: ContentBlock[];
     suffix?: unknown[];
     completed: boolean;
     captured?: unknown[];
+    counted?: boolean;
 }
 export interface RawCheckpoint {
     createdAt?: unknown;

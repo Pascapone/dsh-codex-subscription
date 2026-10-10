@@ -4,14 +4,15 @@ import type { Translate, SubscriptionRpcClient } from './client-types.js';
 import type { SketchSessionState, SketchStudioAdapter } from './sketch-session-state.js';
 import type { SketchGesture, SketchStroke, SketchPoint, SketchDocument, SketchRequest } from './sketch-types.js';
 export type SketchIncoming = { file: File };
-type Selection = { layer: number; id?: string };
-type TextEdit = { point?: SketchPoint; selection?: Selection | null; value: string };
-export type SketchStudioProps = { open: boolean; agentEnabled: boolean; agentPreview: boolean; onOpen(): void; onClose(): void; attachSketch(blob: Blob): unknown | Promise<unknown>; enabled: boolean; t: Translate; incoming: SketchIncoming | null; sessionId: string; rpc?: SubscriptionRpcClient; sessionState?: SketchSessionState };
+export type Selection = { layer: number; id?: string };
+export type TextEdit = { point?: SketchPoint; selection?: Selection | null; value: string };
+export type SketchStudioProps = { open: boolean; agentEnabled: boolean; onOpen(): void; onClose(): void; attachSketch(blob: Blob): unknown | Promise<unknown>; enabled: boolean; t: Translate; incoming: SketchIncoming | null; sessionId: string; rpc?: SubscriptionRpcClient; sessionState?: SketchSessionState };
 type AgentApi = { version: number; sessionId: string; execute: ReturnType<typeof createSketchAgentRun>['execute']; export(format: string): ReturnType<typeof exportSketchAgentFile> };
 declare global { interface Window { dshSketchAgent?: AgentApi } }
 import { SketchLayerPanel } from './sketch-layer-panel.js'
+import { SketchPicturePanel } from './sketch-picture-panel.js'
+import { SketchControls } from './sketch-controls.js'
 import { newTextBounds } from './sketch-text.js'
-import { SketchToolPicker } from './sketch-tool-picker.js'
 import { updateSketchGesture } from './sketch-gesture.js'
 import { createSketchDocumentLifecycle } from './sketch-document-lifecycle.js'
 import { createSketchOperationGate } from './sketch-operation-gate.js'
@@ -34,9 +35,10 @@ import {
   resizeSketch
 } from './sketch-layers.js'
 import { paintSketchLayers } from './sketch-layer-renderer.js'
+import { composeSketchPreview } from './sketch-preview.js'
 import { smoothStrokePoints } from './sketch-input.js'
 import { sketchDrafts } from './sketch-drafts.js'
-import { useSketchView, SketchViewControls } from './sketch-view.js'
+import { useSketchView } from './sketch-view.js'
 import { SketchFiles } from './sketch-files.js'
 import { useSketchDismiss, useSketchCursor } from './sketch-interactions.js'
 import { WorkspaceIcon } from './workspace-icons.js'
@@ -55,19 +57,9 @@ import {
 import { createSketchAgentRun } from './sketch-agent-run.js'
 import { connectSketchAgent } from './sketch-agent-client.js'
 import { encodeSketchDocument, exportSketchPsd } from './sketch-formats.js'
-const PALETTE = [
-  '#18181b',
-  '#929398',
-  '#ff3936',
-  '#ff9500',
-  '#ffcc00',
-  '#34c759',
-  '#0088ff'
-]
 export function SketchStudio({
   open,
   agentEnabled,
-  agentPreview,
   onOpen,
   onClose,
   attachSketch,
@@ -464,7 +456,6 @@ export function SketchStudio({
       setNoticeHidden(false)
     },
     available: () => enabled && agentEnabled,
-    previewEnabled: () => agentPreview,
     open: () => onOpen(),
     busy: () =>
       operationGate.current!.running ||
@@ -502,9 +493,23 @@ export function SketchStudio({
       setError('')
       schedule()
     },
-    preview: async () => {
-      paint()
-      return canvas.current!.toDataURL('image/png')
+    preview: async (options?: import('./sketch-types.js').SketchPreviewOptions) => {
+      const w = doc.current.width ?? SKETCH_SIZE,
+        h = doc.current.height ?? SKETCH_SIZE
+      return composeSketchPreview({
+        doc: doc.current,
+        images: images.current,
+        width: w,
+        height: h,
+        options,
+        paintLayers: paintSketchLayers,
+        makeSurface: (width, height) =>
+          Object.assign(document.createElement('canvas'), { width, height })
+      })
+    },
+    addReference: async (dataUrl: string, name: string) => {
+      const blob = await (await fetch(dataUrl)).blob()
+      await importImage(new File([blob], name, { type: blob.type }), { visible: false })
     },
     save: save
   })
@@ -513,8 +518,7 @@ export function SketchStudio({
     execute: (request: SketchRequest) => agentSession.current!(request),
     open: () => agentAdapter.current.open!(),
     changed: (state: string) => agentAdapter.current.changed?.(state),
-    busy: () => agentAdapter.current.busy!(),
-    previewEnabled: () => agentAdapter.current.previewEnabled!()
+    busy: () => agentAdapter.current.busy!()
   })
   useEffect(() => {
     if (!enabled || !agentEnabled || !hydrated) return
@@ -586,10 +590,9 @@ export function SketchStudio({
       }
     if (format === 'psd')
       return {
-        blob: new Blob(
-          [await exportSketchPsd(doc.current, images.current, canvas.current!)],
-          { type: 'image/vnd.adobe.photoshop' }
-        ),
+        blob: new Blob([await exportSketchPsd(doc.current, images.current, canvas.current!)], {
+          type: 'image/vnd.adobe.photoshop'
+        }),
         extension: 'psd'
       }
     if (format !== 'png') throw Error('Unsupported format')
@@ -1134,62 +1137,15 @@ export function SketchStudio({
             </form>
           ) : null}
           {picturesOpen ? (
-            <aside className="codexSketchPictures">
-              <header>
-                <strong>{t('sketchPictures')}</strong>
-                <button
-                  type="button"
-                  disabled={agentLocked || busy}
-                  onClick={() => pictureInput.current!.click()}
-                >
-                  {t('sketchPictureAdd')}
-                </button>
-              </header>
-              <input
-                ref={pictureInput}
-                hidden
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  e.target.value = ''
-                  if (file) void runFile(() => importImage(file))
-                }}
-              />
-              {doc.current.layers
-                .filter((layer) => layer.image)
-                .map((layer) => (
-                  <div
-                    key={layer.id}
-                    data-active={layer.id === doc.current.active}
-                  >
-                    <button
-                      type="button"
-                      disabled={agentLocked || busy}
-                      aria-label={`${t('sketchPictureSelect')} ${layer.name}`}
-                      onClick={() => change('select', layer.id)}
-                    >
-                      <img src={layer.image!.src} alt={layer.name} />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={agentLocked || busy}
-                      aria-label={`${t('sketchDeleteDraft')} ${layer.name}`}
-                      onClick={() =>
-                        change(
-                          doc.current.layers.length === 1 ? 'clear' : 'delete',
-                          layer.id
-                        )
-                      }
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              {!doc.current.layers.some((layer) => layer.image) ? (
-                <small>{t('sketchPicturesEmpty')}</small>
-              ) : null}
-            </aside>
+            <SketchPicturePanel
+              document={doc.current}
+              disabled={agentLocked || busy}
+              pictureInput={pictureInput}
+              importImage={importImage}
+              runFile={runFile}
+              change={change}
+              t={t}
+            />
           ) : null}
           {layersOpen ? (
             <SketchLayerPanel
@@ -1200,130 +1156,31 @@ export function SketchStudio({
             />
           ) : null}
         </div>
-        <div className="codexSketchControls">
-          <button
-            type="button"
-            className="codexSketchPicturesToggle"
-            aria-expanded={picturesOpen}
-            onClick={() => setPicturesOpen((v) => !v)}
-          >
-            {t('sketchPictures')}
-          </button>
-          <SketchViewControls navigation={navigation} t={t} />
-          <SketchToolPicker
-            t={t}
-            disabled={agentLocked || busy}
-            tool={tool}
-            brush={brush}
-            chooseBrush={chooseBrush}
-            chooseTool={chooseTool}
-            shapesOpen={shapesOpen}
-            setShapesOpen={setShapesOpen}
-          />
-          <div className="codexLayerBrush">
-            {['rectangle', 'circle'].includes(tool) ? (
-              <label>
-                <input
-                  type="checkbox"
-                  disabled={agentLocked || busy}
-                  checked={fillShape}
-                  onChange={(e) => setFillShape(e.target.checked)}
-                />
-                {t('sketchFill')}
-              </label>
-            ) : null}
-            {selected ? (
-              <div className="codexSketchObjectActions">
-                <button
-                  disabled={agentLocked || busy}
-                  onClick={() => editObject({}, 'duplicate')}
-                >
-                  {t('sketchObjectDuplicate')}
-                </button>
-                <button
-                  disabled={agentLocked || busy}
-                  onClick={() => editObject({}, 'delete')}
-                >
-                  {t('sketchObjectDelete')}
-                </button>
-                {selected.shape === 'text' ? (
-                  <button
-                    disabled={agentLocked || busy}
-                    onClick={() =>
-                      setTextEdit({ selection, value: selected.text! })
-                    }
-                  >
-                    {t('sketchText')}
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-            {tool === 'pen' ? (
-              <label className="codexSketchStability">
-                {t('sketchStability')}
-                <select
-                  aria-label={t('sketchStability')}
-                  value={stability}
-                  disabled={agentLocked || busy}
-                  onChange={(e) => setStability(Number(e.target.value))}
-                >
-                  {[0, 25, 50, 75].map((value) => (
-                    <option key={value} value={value}>
-                      {t(`sketchStability${value}`)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            {tool === 'eraser' ? (
-              <div
-                className="codexSketchSegment"
-                role="group"
-                aria-label={t('sketchEraserMode')}
-              >
-                {['pixel', 'stroke'].map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={eraser === value}
-                    disabled={agentLocked || busy}
-                    onClick={() => setEraser(value)}
-                  >
-                    {t(`sketchErase_${value}`)}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-          <div
-            className="codexSketchPalette"
-            role="group"
-            aria-label={t('sketchColor')}
-          >
-            {PALETTE.map((value) => (
-              <button
-                type="button"
-                key={value}
-                className="codexSketchSwatch"
-                style={{ '--swatch': value } as CSSProperties}
-                aria-label={`${t('sketchColor')} ${value}`}
-                aria-pressed={(selected?.color ?? color) === value}
-                disabled={agentLocked || busy}
-                onClick={() => pickColor(value)}
-              />
-            ))}
-            <label className="codexSketchCustom" title={t('sketchColor')}>
-              <span style={{ background: color }} />
-              <input
-                type="color"
-                aria-label={t('sketchColor')}
-                value={color}
-                disabled={agentLocked || busy}
-                onChange={(e) => pickColor(e.target.value)}
-              />
-            </label>
-          </div>
-        </div>
+        <SketchControls
+          t={t}
+          navigation={navigation}
+          picturesOpen={picturesOpen}
+          setPicturesOpen={setPicturesOpen}
+          disabled={agentLocked || busy}
+          tool={tool}
+          brush={brush}
+          chooseBrush={chooseBrush}
+          chooseTool={chooseTool}
+          shapesOpen={shapesOpen}
+          setShapesOpen={setShapesOpen}
+          fillShape={fillShape}
+          setFillShape={setFillShape}
+          selected={selected}
+          editObject={editObject}
+          selection={selection}
+          setTextEdit={setTextEdit}
+          stability={stability}
+          setStability={setStability}
+          eraser={eraser}
+          setEraser={setEraser}
+          color={color}
+          pickColor={pickColor}
+        />
         {error ? (
           <p className="codexSketchHint" role="alert">
             {error}

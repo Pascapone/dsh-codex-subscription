@@ -3,6 +3,10 @@ import type { SubscriptionProviderOptions } from './runtime-types.js';
 import { openaiCodexProvider as createOpenAICodexProvider } from '@earendil-works/pi-ai/providers/openai-codex';
 export { createModels } from '@earendil-works/pi-ai';
 export { createOpenAICodexProvider as openaiCodexProvider };
+export declare const REVIEW_MODEL_SESSION = "session";
+export declare const REVIEW_MODEL_OFFICIAL = "official";
+/** Whether this request is DSH Auto review judging one pending tool call. */
+export declare function isDshAutoReview(context: unknown): boolean;
 /**
  * Preserve pi-ai's native Codex OAuth provider while allowing DSH's generic
  * PiAiAdapter to pass the access token resolved by the host credential store.
@@ -15,5 +19,7 @@ export { createOpenAICodexProvider as openaiCodexProvider };
  * persistence, headers, transport, and model behavior remain owned by the
  * original provider.
  */
-export declare function openaiCodexSubscriptionProvider({ resolveSpeedMode, resolveOutputVerbosity, resolveContextMode, resolveCustomContextWindow, resolveRoute, catalog, connection, compaction, runNetwork, }?: SubscriptionProviderOptions): Provider<'openai-codex-responses'>;
+export declare function openaiCodexSubscriptionProvider({ resolveRoute, resolveSpeedMode, resolveOutputVerbosity, resolveInputImageDetail, resolveContextMode, resolveCustomContextWindow, resolveReviewModel, catalog, connection, compaction, runNetwork, }?: SubscriptionProviderOptions): Provider<'openai-codex-responses'> & {
+    reviewCounters(): Record<string, number>;
+};
 export declare const PI_AI_RUNTIME_VERSIONS: readonly string[];

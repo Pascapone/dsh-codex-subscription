@@ -1,3 +1,9 @@
+import { CodexVoiceInput, CodexVoiceSidebarIndicator } from './client-voice.js';
+import { createVoiceController } from './voice-controller.js';
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  // Plugin-owned namespace keeps the existing dynamic-key/fallback translation contract.
+  interface LocaleNamespaceMap { 'settings.codexSubscription': string }
+}
 import type { Context } from '@deepseek-ai/cordis';
 import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client';
 import type { ModelSelectInjected } from '@deepseek-ai/dsh-client-ui-model-selection/client';
@@ -30,25 +36,22 @@ import { SUBSCRIPTION_IMAGE_VIEWER_CSS } from './subscription-image-viewer-style
 import { SubscriptionImageViewerService } from './subscription-image-viewer.js'
 import { SETTINGS_NAMESPACE } from './settings-contract.js'
 import { createPreferenceController } from './preference-controller.js'
+import { createDefaultModelController } from './default-model-controller.js'
 import { createAccountStatusController } from './account-status-controller.js'
 import { NS, CHANNEL, unwrap } from './client-shared.js'
 import { createSubscriptionRpcClient } from './rpc-contract.js'
 import { CodexComposerQuota } from './client-composer-quota.js'
 import { CodexModelSelect } from './client-model-select.js'
-import { CodexVoiceInput, CodexVoiceSidebarIndicator } from './client-voice.js'
-import { createVoiceController } from './voice-controller.js'
 import { CodexSection } from './client-section.js'
-
-declare module '@deepseek-ai/dsh-client-ui-slots' {
-  // Plugin-owned namespace keeps the existing dynamic-key/fallback translation contract.
-  interface LocaleNamespaceMap { 'settings.codexSubscription': string }
-}
+import { createHostDiagnostics } from './diagnostic-host.js'
 
 export const inject = [
   'slots', 'locale', 'connection', 'remote', 'modelDirectories', 'conversation', 'uiConversation', 'sessions',
 ]
 
 export function apply(ctx: Context) {
+  const diagnostics = createHostDiagnostics()
+  ctx.effect(() => diagnostics.register(ctx.slots), 'codex-subscription: host inspection')
   const imageViewer = new SubscriptionImageViewerService()
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'codex-subscription: copy')
   ctx.effect(() => {
@@ -65,6 +68,7 @@ export function apply(ctx: Context) {
     subscribe: () => () => {},
   }
   const preference = createPreferenceController(scope, rpc)
+  const defaultModel = createDefaultModelController(rpc)
   ctx.effect(() => {
     let previous = JSON.stringify(preference.getSnapshot(), (key,value) => key.startsWith('image') || key === '' ? value : undefined)
     return preference.subscribe(() => {
@@ -81,6 +85,7 @@ export function apply(ctx: Context) {
     return () => {
       disposeReset?.()
       preference.dispose()
+      defaultModel.dispose()
       accountStatus.dispose()
     }
   }, 'codex-subscription: preferences and account status')
@@ -94,19 +99,19 @@ export function apply(ctx: Context) {
     name: 'shell.overlay', id: 'codex-subscription-image-viewer', order: 20,
     inject: () => ({ service: imageViewer, t }),
   }, SubscriptionImageViewerOverlay))
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section', id: 'codex-subscription', order: 15,
-    label: () => t('nav'), locale: NS, inject: () => ({ preference, rpc: rpc, accountStatus, t }),
-  }, CodexSection))
   ctx.slots.inject('conversation.input.activity', () => ctx.slots.register({
     name: 'conversation.input.activity', priority: 10, locale: NS, inject: () => ({ preference, voice, t }),
   }, CodexVoiceInput))
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
-    name: 'shell.overlay', id: 'codex-voice-recording', order: 21,
-    locale: NS, inject: () => ({ voice, t }),
+    name: 'shell.overlay', id: 'codex-voice-recording', order: 21, locale: NS, inject: () => ({ voice, t }),
   }, CodexVoiceSidebarIndicator))
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section', id: 'codex-subscription', order: 15,
+    label: () => t('nav'), locale: NS, inject: () => ({ preference, rpc: rpc, accountStatus, t, diagnostics, defaultModel }),
+  }, CodexSection))
   const sessions = ctx.get('sessions')!
   const installDirectorySlots = (scope: Context) => {
+    scope.effect(() => diagnostics.register(scope.slots), 'codex-subscription: scoped host inspection')
     const modelDirectories = scope.get('modelDirectories')!
     scope.slots.inject('conversation.input.right', () => scope.slots.register({
       name: 'conversation.input.right', id: 'codex-subscription-quota', order: 15,
@@ -175,7 +180,9 @@ export function apply(ctx: Context) {
     imageViewer.close()
     liveOpen('sketch', document.activeElement, new File([blob], name || 'image.png', {type:blob.type || 'image/png'}))
   }
-  const attachForEdit = (sessionId: SessionId) => async (src: string, filename: string, draft: string, annotations: readonly ViewerAnnotation[] = [], referenceName?: string, sourceInDraft = false) => {
+  const attachForEdit = (sessionId: SessionId) => async (src: string, filename: string, draft: string, annotations: readonly ViewerAnnotation[] = [], referenceName?: string, sourceInDraft = false, extraFiles?: readonly File[]) => {
+    // Official image tools pass their own files (possibly none) and always carry an instruction.
+    const tool = Array.isArray(extraFiles)
     if (!preference.getSnapshot().imageEditing) throw new Error('Image editing is disabled')
     return withComposerSession(sessions, sessionId, async actx => {
       if (conversation.input?.for === undefined) {
@@ -189,15 +196,16 @@ export function apply(ctx: Context) {
         const reference = await createAnnotatedImageReference(blob, annotations)
         files.push(new File([reference], referenceName!, { type: 'image/png' }))
       }
+      if (tool) files.push(...extraFiles)
       lifetime.signal.throwIfAborted()
       const input = conversation.input.for(actx)
       if (!preference.getSnapshot().imageEditing) throw new Error('Image editing is disabled')
       if (files.length) attachImageFiles(conversation, input, files, sessionId)
       openComposerSession(sessions, ctx.get('uiWorkspace'), sessionId)
       // Preserve text typed while the asynchronous image preparation ran.
-      if (sourceInDraft && !annotations.length) return
+      if (sourceInDraft && !annotations.length && !tool) return
       if (!input.state.getSnapshot().draft.trim()) input.setDraft(draft)
-      else if (annotations.length) {
+      else if (annotations.length || tool) {
         if (!input.state.getSnapshot().occurrences?.length) appendImagePrompt(input, draft)
         else input.notify('info', draft)
       }

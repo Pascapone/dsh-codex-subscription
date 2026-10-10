@@ -1,8 +1,10 @@
-import type { ConversationNodeDefinition, ConversationLocation } from '@deepseek-ai/dsh-client-ui-conversation/client';
+import type { ConversationNodeDefinition } from '@deepseek-ai/dsh-client-ui-conversation/client';
 type ImageEvent = Parameters<ConversationNodeDefinition<undefined>['match']>[0];
 type LegacyImageResultBlock = {
     type?: unknown;
+    toolCallId?: string;
     isError?: unknown;
+    attachment?: unknown;
     content?: readonly {
         type?: unknown;
         attachment?: unknown;
@@ -30,7 +32,9 @@ export declare const imageConversationNode: {
         id: string;
         kind: string;
         target: string;
-        location: ConversationLocation;
+        location: {
+            kind: string;
+        };
         anchorSeq: number;
         visibility: string;
         data: {

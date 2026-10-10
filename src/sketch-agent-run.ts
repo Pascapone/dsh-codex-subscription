@@ -1,11 +1,12 @@
+
 import type { SketchRequest, SketchCommandResult } from './sketch-types.js';
 // One run spans tool calls; closing the view is not a run event.
 // Short run handles are scoped to the unique documentId, never authentication tokens.
-export function createSketchAgentRun({ execute, open, changed, busy = () => false, previewEnabled = () => false, idleMs = 180_000 }: { execute(request: SketchRequest): Promise<SketchCommandResult>; open(): void; changed(state: string): void; busy?: () => boolean; previewEnabled?: () => boolean; idleMs?: number }) {
+export function createSketchAgentRun({ execute, open, changed, busy = () => false, idleMs = 180_000 }: { execute(request: SketchRequest): Promise<SketchCommandResult>; open(): void; changed(state: string): void; busy?: () => boolean; idleMs?: number }) {
   let state = 'idle', generation = 0, runNumber = 0, pending = false, runId: string | undefined, timer: ReturnType<typeof setTimeout> | undefined, completed: { key: string; value: SketchCommandResult & { runId: string | undefined } } | undefined
   const update = (next: string) => { state = next; changed(next) }
   const clear = () => { clearTimeout(timer); timer = undefined }
-  const expire = () => { clear(); generation++; if (state !== 'stopped') update('failed') }
+  const expire = () => { clear(); generation++; if (state === 'drawing') update('failed') }
   return {
     get state() { return state },
     get locked() { return state === 'drawing' },
@@ -28,9 +29,7 @@ export function createSketchAgentRun({ execute, open, changed, busy = () => fals
         const value = await execute(request.action === 'finish' ? {...request, action:'save'} : request)
         if (version !== generation) throw Error('Drawing interrupted')
         if (request.action !== 'finish') return {...value,runId}
-        const result = previewEnabled() ? await execute({action:'preview',documentId:value.documentId}) : value
-        if (version !== generation) throw Error('Drawing interrupted')
-        completed={key:JSON.stringify(request),value:{...result,runId}}
+        completed={key:JSON.stringify(request),value:{...value,runId}}
         update('finished')
         return completed.value
       } catch (error) {

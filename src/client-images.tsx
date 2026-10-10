@@ -1,3 +1,4 @@
+
 import type { ToolCallBlock, ToolResultNode } from '@deepseek-ai/dsh-client-ui-conversation/client';
 import type { ImageClientProps, ImagePresentationAttachment } from './image-client-types.js';
 import type { OriginalImageRef } from './image-original-contract.js';
@@ -8,6 +9,7 @@ declare module '@deepseek-ai/dsh-client-ui-chat/client' {
   interface ChatNodeDataMap { 'codex-image-output': { blocks: ImageBlock[] } }
 }
 import { PhotoIcon, ArrowPathIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline'
+import { officialImageTools } from './image-official-tools.js'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { buildImageEditDraft } from './image-edit.js'
 import { decodeImagePresentation } from './image-original-contract.js'
@@ -81,7 +83,7 @@ function CodexGeneratedImage({ attachment, original, rpc, sessionId, loadImage, 
               sourceName, referenceName,
             }), annotations, referenceName)
           },
-        }, ...(features.imageSketch && openSketchImage ? [{id:'sketch',label:t('imageToSketch'),pendingLabel:t('imageEditPreparing'),errorLabel:t('imageEditFailed'),onInvoke:()=>openSketchImage(src,downloadName)}] : [])],
+        }, ...officialImageTools({ src, name: downloadName, t, attachForEdit }), ...(features.imageSketch && openSketchImage ? [{id:'sketch',label:t('imageToSketch'),pendingLabel:t('imageEditPreparing'),errorLabel:t('imageEditFailed'),onInvoke:()=>openSketchImage(src,downloadName)}] : [])],
       }],
       opener: triggerRef.current,
       source: 'codex-generated',
@@ -113,13 +115,15 @@ export function CodexImageToolRow({ presentation = 'tool', block, sessionId, rpc
   const error = failed
     ? block!.content!.find((item): item is Extract<ToolResultNode['content'][number], { type: 'text' }> => item?.type === 'text' && typeof item.text === 'string')?.text
     : undefined
+  const meta = block?.meta as { requestedModel?: unknown; reportedModel?: unknown; requestedSize?: unknown } | undefined
   const original = decodeImagePresentation(block?.meta)?.original
   const showOutput = presentation === 'output'
   const StateIcon = !settled ? ArrowPathIcon : failed ? ExclamationCircleIcon : PhotoIcon
   return <div className="codexImageTool" data-state={state}>
     {showOutput ? null : <div className="codexImageToolRow"><StateIcon className="codexImageToolIcon" aria-hidden="true" /><span className="codexImageToolTitle">{t('imageGenerate')}</span><span className="codexImageBeta">{t('imageBeta')}</span><span className="codexImageToolState">{status}</span></div>}
-    {!showOutput || image === undefined ? null : <div className="codexImageToolGallery"><CodexGeneratedImage features={features} attachment={image.attachment} original={original} rpc={rpc} sessionId={sessionId} loadImage={loadImage} openSketchImage={openSketchImage} attachForEdit={attachForEdit} getImageViewer={getImageViewer} getInternalImageViewer={getInternalImageViewer} t={t} /></div>}
-    {!showOutput && typeof (block?.meta as Record<string, unknown> | undefined)?.requestedModel === 'string' ? <details className="codexImageDetails"><summary>{t('imageDetails')}</summary><p>{t('imageRequestedModel')}: {((block!.meta as Record<string, unknown>).requestedModel as string).slice(0,100)}<br />{t('imageReportedModel')}: {typeof (block!.meta as Record<string, unknown>).reportedModel === 'string' ? ((block!.meta as Record<string, unknown>).reportedModel as string).slice(0,100) : t('imageModelUnreported')}<br />{t('imageRequestedSize')}: {String((block!.meta as Record<string, unknown>).requestedSize ?? 'auto').slice(0,40)} · {t('imageActualSize')}: {original?.width} × {original?.height}</p></details> : null}
+    {/* Retain the tool preview for inspection while the completed output renders independently. */}
+    {(!showOutput && !settled) || image === undefined ? null : <div className="codexImageToolGallery"><CodexGeneratedImage features={features} attachment={image.attachment} original={original} rpc={rpc} sessionId={sessionId} loadImage={loadImage} openSketchImage={openSketchImage} attachForEdit={attachForEdit} getImageViewer={getImageViewer} getInternalImageViewer={getInternalImageViewer} t={t} /></div>}
+    {!showOutput && typeof meta?.requestedModel === 'string' ? <details className="codexImageDetails"><summary>{t('imageDetails')}</summary><p>{t('imageRequestedModel')}: {meta.requestedModel.slice(0,100)}<br />{t('imageReportedModel')}: {typeof meta.reportedModel === 'string' ? meta.reportedModel.slice(0,100) : t('imageModelUnreported')}<br />{t('imageRequestedSize')}: {String(meta.requestedSize ?? 'auto').slice(0,40)} · {t('imageActualSize')}: {original?.width} × {original?.height}</p></details> : null}
     {error === undefined ? null : <p className="codexImageToolError">{error}</p>}
   </div>
 }

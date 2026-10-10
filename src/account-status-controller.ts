@@ -1,3 +1,4 @@
+
 import type { ConnectionRpcResult } from '@deepseek-ai/dsh-client-connection/client';
 import type { AccountStatusView } from './auth-types.js';
 import type { createSubscriptionRpcClient } from './rpc-contract.js';
@@ -70,7 +71,7 @@ function publicAccountStatusError(error: unknown) {
 
 /** Own the account-status request lifecycle independently from account actions. */
 export function createAccountStatusController(rpc: SubscriptionRpcClient | undefined, options: { request?: (signal: AbortSignal) => Promise<ConnectionRpcResult<unknown>>; setTimeout?: (callback: () => void, delay: number) => ReturnType<typeof setTimeout>; clearTimeout?: (timer: ReturnType<typeof setTimeout> | undefined) => void; timeoutMs?: number } = {}) {
-  const request = options.request ?? (() => rpc!.call(CHANNEL, 'status', {}))
+  const request = options.request ?? ((signal: AbortSignal): Promise<ConnectionRpcResult<unknown>> => rpc!.call(CHANNEL, 'status', {}, signal))
   const scheduleTimeout = options.setTimeout ?? setTimeout
   const cancelTimeout = options.clearTimeout ?? clearTimeout
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS

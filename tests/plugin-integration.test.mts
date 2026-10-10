@@ -1,3 +1,4 @@
+
 import type { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai';
 import type { WebSearchProvider } from '@deepseek-ai/dsh-web';
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools';
@@ -5,7 +6,7 @@ type FixtureAdapter = Pick<PiAiAdapter, 'listModels' | 'resolveModel' | 'prepare
 type FixtureAssembly = {sections: {name: string; text: string; interpolate?: boolean}[]; contexts: unknown[]; tools: unknown[]; variables: Record<string, string>};
 type FixtureListener = (assembly: unknown, context: unknown, next: () => Promise<FixtureAssembly>) => Promise<FixtureAssembly>;
 type FixtureRoute = {path: string; methods: string[]; fetch(request: Request): Response | Promise<Response>};
-type FixtureValue = Record<string, unknown> & {contextModels: ReturnType<typeof contextModelGroups>; verbosityModels: string[]; catalog: {source: string; refresh: string}};
+type FixtureValue = Record<string, unknown> & {contextModels: ReturnType<typeof contextModelGroups>; verbosityModels: string[]; catalog: {source: string; refresh: string}; supportText: string; generatedAt: string; inspection: NonNullable<import('../src/diagnostic-types.js').DiagnosticReport['inspection']>};
 type FixtureReply = {ok: boolean; value: FixtureValue; error: {message: string}};
 import assert from 'node:assert/strict'
 import { RPC_ENDPOINTS } from '../src/rpc-contract.js'
@@ -14,20 +15,36 @@ import { DSH_MODEL_PROMPTS } from '../src/codex-base-prompts.js'
 import test from 'node:test'
 import Schema from '@deepseek-ai/schemastery'
 
+import * as authoredPlugin from '../src/index.js'
+import { pathToFileURL } from 'node:url'
+const plugin: typeof authoredPlugin = process.env.CODEX_PACKAGE_ENTRY
+  ? await import(pathToFileURL(process.env.CODEX_PACKAGE_ENTRY).href) as typeof authoredPlugin
+  : authoredPlugin
+const { apply: applyPlugin } = plugin
+
 test('settings schema survives the native browser JSON round trip', () => {
   const host = fakeContext()
   applyPlugin(((host.ctx) as unknown as Parameters<typeof applyPlugin>[0]))
   const schema = host.settings[0].schema
-  const value = schema({ imageSketch: true, imageSketchAgent: true, searchDomains: ['EXAMPLE.com', 'example.com'] })
+  const value = schema({ imageSketch: true, imageSketchAgent: true, searchDomains: ['EXAMPLE.com', 'example.com'], disabledModels: ['gpt-5.5'] })
   const browserSchema = new Schema(JSON.parse(JSON.stringify(schema)))
   assert.deepEqual(browserSchema(JSON.parse(JSON.stringify(value))), value)
+  assert.equal(value.autoQuotaRetry, false)
+  assert.deepEqual(value.disabledModels, ['gpt-5.5'])
   assert.deepEqual(value.searchDomains, ['example.com'])
   assert.throws(() => browserSchema({ searchDomains: ['https://example.com/path'] }), /Invalid search domain/)
 })
 
-import * as plugin from '../src/index.js'
+test('every subscription preference remains editable on supported DSH settings hosts', () => {
+  for (const [name, field] of Object.entries(plugin.Config.dict!)) {
+    assert.equal(field.meta.volatile, true, `${name} must be writable in DSH settings`)
+  }
+})
+
+import { hostDshVersion } from '../src/subagent-runtime.js'
 import { PACKAGE_VERSION } from '../src/version.js'
 import {
+  AUTO_QUOTA_RETRY_FIELD,
   CONTEXT_MODE_CUSTOM,
   CONTEXT_MODE_EXTENDED,
   CONTEXT_MODE_STANDARD,
@@ -35,7 +52,10 @@ import {
   contextModelGroups,
   CUSTOM_CONTEXT_WINDOW_FIELD,
   CONTEXT_MODE_FIELD,
+  DISABLED_MODELS_FIELD,
   formatContextWindow,
+  INPUT_IMAGE_DETAIL_FIELD,
+  normalizeAutoQuotaRetry,
   normalizeQuickQuotaMode,
   normalizeSearchProvider,
   parseContextWindow,
@@ -45,6 +65,7 @@ import {
   QUICK_QUOTA_MODE_PERCENT,
   OUTPUT_VERBOSITY_DEFAULT,
   OUTPUT_VERBOSITY_FIELD,
+  STREAM_IDLE_TIMEOUT_MINUTES_FIELD,
   SEARCH_PROVIDER_AUTO,
   SEARCH_PROVIDER_CODEX,
   SEARCH_PROVIDER_DSH,
@@ -52,9 +73,10 @@ import {
   SPEED_MODE_STANDARD,
 } from '../src/settings-contract.js'
 
-const { apply: applyPlugin } = plugin
-
 test('composer quota mode normalizes formal values and legacy booleans', () => {
+  assert.equal(normalizeAutoQuotaRetry(undefined), false)
+  assert.equal(normalizeAutoQuotaRetry(false), false)
+  assert.equal(normalizeAutoQuotaRetry('false'), false)
   assert.equal(normalizeQuickQuotaMode(QUICK_QUOTA_MODE_OFF), QUICK_QUOTA_MODE_OFF)
   assert.equal(normalizeQuickQuotaMode(QUICK_QUOTA_MODE_PERCENT), QUICK_QUOTA_MODE_PERCENT)
   assert.equal(normalizeQuickQuotaMode(QUICK_QUOTA_MODE_BAR), QUICK_QUOTA_MODE_BAR)
@@ -106,15 +128,17 @@ test('custom context rows follow the active upstream model catalog', () => {
 })
 
 function fakeContext({ connection = true, webServer = true, prompt = false } = {}) {
-  const promptHooks: {listener: FixtureListener; options: {prepend: boolean}}[] = []
   const registered: {providers: string[]; adapter: FixtureAdapter}[] = []
   const handled: FixtureRoute[] = []
+  const promptHooks: {listener: FixtureListener; options: {prepend: boolean}}[] = []
+  const listeners: {event: string; listener: (...args: unknown[]) => unknown}[] = []
   const searchProviders: WebSearchProvider[] = []
   const tools: ToolDefinition[] = []
   const settings: {namespace: string; schema: typeof plugin.Config}[] = []
   const webUpdates: {config: {searchProvider: string; fetchProvider: string}; noSave: boolean}[] = []
   const provided = new Map<string, unknown>()
-  let preference: Record<string, unknown> = { quickQuotaVisible: false, searchProvider: SEARCH_PROVIDER_AUTO, outputVerbosity: OUTPUT_VERBOSITY_DEFAULT, speedMode: SPEED_MODE_STANDARD, contextMode: CONTEXT_MODE_STANDARD, customContextWindow: 272_000, customContextGpt54: 1_000_000, customContextGpt54Mini: 400_000, customContextGpt55: 1_000_000, customContextGpt56: 1_000_000 }
+  const disposers = new Map<string, () => unknown>()
+  let preference: Record<string, unknown> = { autoQuotaRetry: false, quickQuotaVisible: false, searchProvider: SEARCH_PROVIDER_AUTO, outputVerbosity: OUTPUT_VERBOSITY_DEFAULT, streamIdleTimeoutMinutes: 10, speedMode: SPEED_MODE_STANDARD, contextMode: CONTEXT_MODE_STANDARD, customContextWindow: 272_000, customContextGpt54: 1_000_000, customContextGpt54Mini: 400_000, customContextGpt55: 1_000_000, customContextGpt56: 1_000_000 }
   const preferenceWatchers = new Set<(value: Record<string, unknown>, previous: Record<string, unknown>) => unknown>()
   let credential: string | undefined
   const webEntry = {
@@ -130,7 +154,6 @@ function fakeContext({ connection = true, webServer = true, prompt = false } = {
   const searchProviderMap = new Map<string, WebSearchProvider>([['deepseek-official', { id: 'deepseek-official', available: () => true, async search() { return { sources: [], truncated: false } } }]])
   const ctx = {
     systemPrompt: prompt ? {} : undefined,
-    on(event: string, listener: FixtureListener, options: {prepend: boolean}) { if (event === 'system-prompt/assemble') promptHooks.push({ listener, options }); return () => {} },
     credentials: {
       async resolve() { return credential === undefined ? undefined : { value: credential } },
       async set(_ref: unknown, value: string) { credential = value },
@@ -138,8 +161,9 @@ function fakeContext({ connection = true, webServer = true, prompt = false } = {
     },
     llm: {
       registerAdapter(providers: string[], adapter: FixtureAdapter) {
-        registered.push({ providers, adapter })
-        return () => {}
+        const registration = { providers, adapter }
+        registered.push(registration)
+        return { replace(next: string[]) { registration.providers = next } }
       },
     },
     attachments: {
@@ -186,7 +210,7 @@ function fakeContext({ connection = true, webServer = true, prompt = false } = {
            },
            watch(callback: (value: Record<string, unknown>, previous: Record<string, unknown>) => unknown) {
              preferenceWatchers.add(callback)
-             return () => preferenceWatchers.delete(callback)
+             return (): unknown => preferenceWatchers.delete(callback)
            },
          }
       },
@@ -197,12 +221,25 @@ function fakeContext({ connection = true, webServer = true, prompt = false } = {
     inject(services: string[], callback: (value: unknown) => void) {
       if (services.every(service => (ctx as Record<string, unknown>)[service] !== undefined)) callback(ctx)
     },
+    on(event: string, listener: (...args: unknown[]) => unknown, options: {prepend?: boolean} = {}) {
+      if (event === 'system-prompt/assemble') promptHooks.push({ listener: listener as FixtureListener, options: {prepend: options.prepend === true} })
+      const entry = { event, listener }
+      listeners.push(entry)
+      return () => {
+        const index = listeners.indexOf(entry)
+        if (index >= 0) listeners.splice(index, 1)
+      }
+    },
     get(name: string) { return provided.get(name) },
     provide(name: string, value: unknown) { provided.set(name, value) },
-    effect(register: () => unknown) { return register() },
+    effect(register: () => unknown, label?: string) {
+      const dispose = register()
+      if (label && typeof dispose === 'function') disposers.set(label, dispose as () => unknown)
+      return dispose
+    },
   }
   return {
-    ctx, registered, handled, provided, searchProviders, settings, tools, webUpdates, promptHooks,
+    ctx: ctx as typeof ctx & Parameters<typeof applyPlugin>[0], registered, handled, listeners, provided, searchProviders, settings, tools, webUpdates, promptHooks, disposers,
     async request(endpoint: string, payload: unknown, signal: AbortSignal) {
       const method = 'codex-subscription/' + endpoint
       const route = handled.find(route => route.path === '/api/' + method)!
@@ -216,6 +253,42 @@ function fakeContext({ connection = true, webServer = true, prompt = false } = {
     },
   }
 }
+
+test('plugin unload aborts an active login without logging out or deleting credentials', async () => {
+  const host = fakeContext()
+  const prototype = plugin.CodexLoginCoordinator.prototype
+  const originalStart = prototype.start
+  let signal: AbortSignal | undefined, logout = 0, coordinator: InstanceType<typeof plugin.CodexLoginCoordinator> | undefined
+  const credential = { access: 'existing-synthetic-credential' }
+  prototype.start = function(options) {
+    coordinator = this
+    this.auth = {
+      async status() { return {authenticated:true,provider:'openai-codex'} },
+      async login(interaction) {
+        signal = interaction.signal
+        interaction.notify({type:'auth_url',url:'https://auth.openai.com/oauth/authorize?state=test'})
+        await new Promise<void>((_resolve,reject)=>signal!.addEventListener('abort',()=>reject(signal!.reason),{once:true}))
+      },
+      async logout() { logout++; credential.access = '' },
+      async select() { throw Error('not used') }, async remove() { throw Error('not used') },
+    }
+    return originalStart.call(this,options)
+  }
+  try {
+    applyPlugin(host.ctx)
+    const started = await host.request('login/start',{method:'browser'},new AbortController().signal)
+    assert.equal(started.ok,true)
+    assert.equal(signal?.aborted,false)
+    const dispose = host.disposers.get('codex-subscription: login lifecycle')
+    assert.ok(dispose)
+    await dispose()
+    assert.equal(signal?.aborted,true)
+    assert.equal(logout,0)
+    assert.equal(credential.access,'existing-synthetic-credential')
+    await assert.rejects(coordinator!.start({method:'browser'}),/disposed/)
+    await dispose()
+  } finally { prototype.start = originalStart }
+})
 
 test('session speed writes keep other sessions and reject invalid requests', async () => {
   const host = fakeContext()
@@ -239,8 +312,8 @@ test('session speed writes keep other sessions and reject invalid requests', asy
 
 test('account routes register without directly accessing the web server', () => {
   const host = fakeContext({ webServer: false })
-  assert.doesNotThrow(() => applyPlugin(((host.ctx) as unknown as Parameters<typeof applyPlugin>[0])))
-  assert.equal(host.handled.length, RPC_ENDPOINTS.length + 1)
+  assert.doesNotThrow(() => applyPlugin(host.ctx))
+  assert.equal(host.handled.length, RPC_ENDPOINTS.length + 1, 'includes the PSD codec route')
   assert.equal(host.tools.length, 1)
 })
 
@@ -252,23 +325,26 @@ test('plugin activates without the web connection service in Headless mode', () 
   assert.equal(host.handled.length, 0)
 })
 
-test('every advertised Codex model resolves and prepares without reading credentials', async () => {
+test('signed out, the account advertises no models and model metadata never reads credentials', async () => {
   const host = fakeContext()
-  applyPlugin(((host.ctx) as unknown as Parameters<typeof applyPlugin>[0]))
-  // Activation may inspect account state; model metadata must not require it.
+  applyPlugin(host.ctx)
   host.ctx.credentials.resolve = async () => assert.fail('model metadata must not read credentials')
   const adapter = host.registered[0].adapter
-  const models = await adapter.listModels('openai-codex')
-  assert.ok(models.length > 0)
-  for (const model of models) {
-    const resolved = await adapter.resolveModel('openai-codex', model.id)!
-    assert.equal(resolved.provider, 'openai-codex')
-    assert.equal(resolved.id, model.id)
-    assert.ok(resolved.context!.contextWindow > 0)
-    const prepared = await adapter.prepareCall('openai-codex', model.id)
-    assert.deepEqual(prepared.model, resolved)
-    assert.equal(typeof prepared.stream, 'function')
-  }
+  assert.deepEqual(await adapter.listModels('openai-codex'), [], 'no bundled list stands in for the account catalog')
+  await assert.rejects(adapter.resolveModel('openai-codex', 'gpt-5.5'))
+})
+
+test('hiding a model only changes the saved display list, not what the adapter advertises', async () => {
+  const host = fakeContext()
+  applyPlugin(host.ctx)
+  const adapter = host.registered[0].adapter
+  const signal = new AbortController().signal
+  const updated = await host.request('preferences/update', { [DISABLED_MODELS_FIELD]: ['gpt-5.5'] }, signal)
+  assert.equal(updated.ok, true)
+  assert.deepEqual(updated.value.disabledModels, ['gpt-5.5'])
+  assert.deepEqual(updated.value.availableModels, [])
+  assert.deepEqual(await adapter.listModels('openai-codex'), [])
+  await host.request('preferences/update', { [DISABLED_MODELS_FIELD]: [] }, signal)
 })
 
 test('plugin registers one Codex route, subscription image tool, and DSH-trusted redacted RPC', async () => {
@@ -277,7 +353,8 @@ test('plugin registers one Codex route, subscription image tool, and DSH-trusted
 
   assert.equal('CODEX_PROVIDER_POLICY' in plugin, false, 'do not replace the removed boundary with cosmetic metadata')
   assert.deepEqual(host.registered.map(item => item.providers), [['openai-codex']])
-  const profile = host.registered[0].adapter.current().profiles.get('openai-codex')!
+  const profile = host.registered[0].adapter.current().profiles.get('openai-codex')
+  assert.equal(profile.streamIdleTimeoutMs, 10 * 60 * 1000)
   assert.deepEqual({
     maxRequestImageBytes: profile.maxRequestImageBytes,
     requestImagePixelBudget: profile.requestImagePixelBudget,
@@ -291,20 +368,14 @@ test('plugin registers one Codex route, subscription image tool, and DSH-trusted
   assert.equal(profile.modelErrors.get('gpt-5.5'), undefined, 'a serviceable model records no diagnostic')
   assert.deepEqual(host.searchProviders.map(provider => provider.id), ['codex-subscription', 'codex-subscription-auto'])
   assert.deepEqual(host.tools.map(tool => tool.name), ['codex_image_generate'])
+  assert.equal(host.listeners.filter(listener => listener.event === 'agent/request-error').length, 1)
   assert.equal(host.registered[0].adapter.providerRetryPolicy(), undefined)
   const models = await host.registered[0].adapter.listModels('openai-codex')
-  assert.ok(models.length > 0, 'the supported DSH adapter must receive auth before creating its model registry')
-  assert.equal((await host.registered[0].adapter.resolveModel('openai-codex', 'gpt-5.5')!)!.context!.contextWindow, 272_000)
-  await host.updateSettings({ [CONTEXT_MODE_FIELD]: CONTEXT_MODE_EXTENDED })
-  assert.equal((await host.registered[0].adapter.resolveModel('openai-codex', 'gpt-5.5')!)!.context!.contextWindow, 1_000_000)
-  await host.updateSettings({ [CONTEXT_MODE_FIELD]: CONTEXT_MODE_CUSTOM, customContextModels: { 'gpt-6-astra': 400_000 }, customContextGpt55: 500_000 })
-  assert.equal((await host.registered[0].adapter.resolveModel('openai-codex', 'gpt-6-astra')!)!.context!.contextWindow, 400_000)
-  assert.equal((await host.registered[0].adapter.resolveModel('openai-codex', 'gpt-5.5')!)!.context!.contextWindow, 500_000)
-  await host.updateSettings({ [CONTEXT_MODE_FIELD]: CONTEXT_MODE_STANDARD, [CUSTOM_CONTEXT_WINDOW_FIELD]: 272_000, customContextModels: {}, customContextGpt54: 272_000, customContextGpt54Mini: 272_000, customContextGpt55: 272_000, customContextGpt56: 272_000 })
-  assert.equal(host.handled.length, RPC_ENDPOINTS.length + 1)
-  assert.equal(host.handled[0].path, '/api/codex-subscription/status')
-  assert.ok(host.handled.filter(route => route.path !== '/api/codex-subscription/sketch-psd-worker').every(route => route.methods.length === 1 && route.methods[0] === 'POST'))
-  assert.deepEqual(host.handled.find(route => route.path === '/api/codex-subscription/sketch-psd-worker')!.methods, ['GET'])
+  assert.deepEqual(models, [], 'signed out there is no account catalog to advertise')
+  assert.deepEqual(host.handled.map(route => [route.path, route.methods]), [
+    ...RPC_ENDPOINTS.map(endpoint => [`/api/codex-subscription/${endpoint}`, ['POST']]),
+    ['/api/codex-subscription/sketch-psd-worker', ['GET']],
+  ])
   assert.equal(host.settings.length, 1)
   assert.equal(host.provided.size, 0, 'the plugin should not publish undocumented host services')
   assert.equal('CodexCacheTelemetry' in plugin, false, 'cache diagnostics are outside the subscription route boundary')
@@ -318,24 +389,36 @@ test('plugin registers one Codex route, subscription image tool, and DSH-trusted
   assert.doesNotMatch(JSON.stringify(status), /access|refresh|accountId/)
 
   const diagnostics = await host.request('diagnostics', {}, signal)
-  assert.equal(diagnostics.value.catalog.source, 'fallback')
+  assert.equal(diagnostics.value.catalog.source, 'unavailable')
   assert.ok(['idle', 'refreshing'].includes(diagnostics.value.catalog.refresh))
+  assert.ok(Number.isFinite(Date.parse(diagnostics.value.generatedAt)))
+  assert.equal(diagnostics.value.inspection.meaning, 'collection-success-is-not-feature-success')
+  assert.ok(diagnostics.value.inspection.capabilities.every(item => item.execution === 'not-verified'))
   assert.deepEqual(diagnostics, {
     ok: true,
     value: {
       schemaVersion: 3,
-      package: '@pascapone/dsh-codex-subscription',
+      generatedAt: diagnostics.value.generatedAt,
+      inspection: diagnostics.value.inspection,
+      requestHistory: { scope: 'plugin-process', capacity: 32, dropped: 0, events: [] },
+      operations: { scope: 'plugin-process', capacity: 32, dropped: 0, events: [] },
+      package: 'dsh-codex-subscription',
       version: PACKAGE_VERSION,
-      runtime: { node: process.version, platform: process.platform, arch: process.arch },
+      runtime: { node: process.version, platform: process.platform, arch: process.arch, dsh: hostDshVersion() },
       account: { status: 'signed-out' },
       login: { phase: 'idle' },
       requests: {},
+      websocket: { requests: 0, connectionsCreated: 0, connectionsReused: 0, deltaRequests: 0, websocketFailures: 0, sseFallbacks: 0 },
+      compaction: { requests: 0, checkpointsSaved: 0, checkpointsReused: 0 },
+      review: { requests: 0, routed: 0, sessionModel: 0, retries: 0 },
       catalog: diagnostics.value.catalog,
       configuration: {
+        autoQuotaRetry: false,
         contextMode: CONTEXT_MODE_STANDARD,
         quickQuotaMode: QUICK_QUOTA_MODE_OFF,
         outputVerbosity: OUTPUT_VERBOSITY_DEFAULT,
         searchProvider: SEARCH_PROVIDER_AUTO,
+        speedMode: SPEED_MODE_STANDARD,
         writable: true,
       },
       issues: [],
@@ -359,38 +442,40 @@ test('plugin registers one Codex route, subscription image tool, and DSH-trusted
 
   const preferenceStatus = await host.request('preferences/status', {}, signal)
   const activeContextModels = preferenceStatus.value.contextModels
-  assert.deepEqual(activeContextModels, [
-    { key: 'gpt-6.1-sol', label: 'GPT-6.1-Sol', maximum: 872_000, default: 272_000 },
-    { key: 'gpt-5.5', label: 'GPT-5.5', maximum: 1_000_000 },
-    { key: 'gpt-5.6', label: 'GPT-5.6 Luna / Sol / Terra', maximum: 1_000_000 },
-    { key: 'gpt-6-astra', label: 'GPT-6 Astra', maximum: 872_000 },
-    { key: 'gpt-6-luna', label: 'GPT-6 Luna', maximum: 272_000, default: 272_000 },
-    { key: 'gpt-6-sol', label: 'GPT-6 Sol', maximum: 272_000, default: 272_000 },
-  ])
-  for (const model of activeContextModels) {
-    assert.equal(typeof model.label, 'string')
-    assert.ok(model.maximum > 0 && model.maximum <= 1_000_000)
-  }
+  assert.deepEqual(activeContextModels, [], 'signed out there are no per-model context rows')
+  assert.deepEqual(preferenceStatus.value.availableModels, [])
   const verbosityModels = preferenceStatus.value.verbosityModels
-  assert.deepEqual(verbosityModels, ['gpt-6.1-sol', 'gpt-5.5', 'gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'gpt-6-luna', 'gpt-6-sol'])
-  assert.equal(verbosityModels.includes('gpt-5.3-codex-spark'), false)
+  assert.deepEqual(verbosityModels, [])
   assert.equal(typeof preferenceStatus.value.subagentRuntimeInstalled, 'boolean')
   assert.deepEqual(preferenceStatus, {
     ok: true,
-    value: { compactionMode: 'dsh', connectionMode: 'sse', subagentBackend: 'dsh', subagentBackendAvailable: false, subagentRuntimeInstalled: preferenceStatus.value.subagentRuntimeInstalled, transcriptionEnabled: false, codexBasePrompt: false, ...IMAGE_FEATURE_DEFAULTS, imageModel: 'gpt-image-2', imageQuality: 'auto', quickQuotaMode: QUICK_QUOTA_MODE_PERCENT, searchProvider: 'codex', speedMode: SPEED_MODE_STANDARD, sessionSpeedModes: {}, outputVerbosity: OUTPUT_VERBOSITY_DEFAULT, contextMode: CONTEXT_MODE_STANDARD, customContextWindow: 272_000, customContextGpt54: 272_000, customContextGpt54Mini: 272_000, customContextGpt55: 272_000, customContextGpt56: 272_000, customContextGpt6Astra: 272_000, contextModels: activeContextModels, verbosityModels, fastModels: preferenceStatus.value.fastModels, catalogStatus: preferenceStatus.value.catalogStatus, customContextModels: {}, searchMode: 'live', searchDomains: [], quotaAlerts: 'important', quotaShortThreshold: 20, quotaLongThreshold: 20, writable: true },
+    value: { disabledModels: [], autoQuotaRetry: false, autoQuotaRetryAvailable: true, codexBasePrompt: false, transcriptionEnabled: false, compactionMode: 'dsh', connectionMode: 'sse', reviewModel: 'session', subagentBackend: 'dsh', subagentBackendAvailable: false, subagentRuntimeInstalled: preferenceStatus.value.subagentRuntimeInstalled, ...IMAGE_FEATURE_DEFAULTS, imageModel: 'gpt-image-2', imageQuality: 'auto', quickQuotaMode: QUICK_QUOTA_MODE_PERCENT, searchProvider: 'codex', speedMode: SPEED_MODE_STANDARD, outputVerbosity: OUTPUT_VERBOSITY_DEFAULT, inputImageDetail: 'auto', streamIdleTimeoutMinutes: 10, contextMode: CONTEXT_MODE_STANDARD, customContextWindow: 272_000, customContextGpt54: 1_000_000, customContextGpt54Mini: 400_000, customContextGpt55: 1_000_000, customContextGpt56: 1_000_000, customContextGpt6Astra: 272_000, contextModels: activeContextModels, availableModels: preferenceStatus.value.availableModels, verbosityModels, fastModels: preferenceStatus.value.fastModels, ultrafastModels: preferenceStatus.value.ultrafastModels, catalogStatus: preferenceStatus.value.catalogStatus, customContextModels: {}, searchMode: 'live', searchDomains: [], quotaAlerts: 'important', quotaShortThreshold: 20, quotaLongThreshold: 20, writable: true },
   })
   const preferenceUpdate = await host.request('preferences/update', {
+    [AUTO_QUOTA_RETRY_FIELD]: false,
     quickQuotaMode: QUICK_QUOTA_MODE_BAR,
     searchProvider: 'dsh',
     speedMode: SPEED_MODE_FAST,
+    [INPUT_IMAGE_DETAIL_FIELD]: 'high',
+    [STREAM_IDLE_TIMEOUT_MINUTES_FIELD]: 5,
     contextMode: CONTEXT_MODE_EXTENDED,
     customContextWindow: 500_000,
     customContextGpt54Mini: 400_000,
   }, signal)
   assert.deepEqual(preferenceUpdate, {
     ok: true,
-    value: { compactionMode: 'dsh', connectionMode: 'sse', subagentBackend: 'dsh', subagentBackendAvailable: false, subagentRuntimeInstalled: preferenceStatus.value.subagentRuntimeInstalled, transcriptionEnabled: false, codexBasePrompt: false, ...IMAGE_FEATURE_DEFAULTS, imageModel: 'gpt-image-2', imageQuality: 'auto', quickQuotaMode: QUICK_QUOTA_MODE_BAR, searchProvider: 'dsh', speedMode: SPEED_MODE_FAST, sessionSpeedModes: {}, outputVerbosity: OUTPUT_VERBOSITY_DEFAULT, contextMode: CONTEXT_MODE_EXTENDED, customContextWindow: 500_000, customContextGpt54: 272_000, customContextGpt54Mini: 400_000, customContextGpt55: 272_000, customContextGpt56: 272_000, customContextGpt6Astra: 272_000, contextModels: activeContextModels, verbosityModels, fastModels: preferenceStatus.value.fastModels, catalogStatus: preferenceStatus.value.catalogStatus, customContextModels: {}, searchMode: 'live', searchDomains: [], quotaAlerts: 'important', quotaShortThreshold: 20, quotaLongThreshold: 20, writable: true },
+    value: { disabledModels: [], autoQuotaRetry: false, autoQuotaRetryAvailable: true, codexBasePrompt: false, transcriptionEnabled: false, compactionMode: 'dsh', connectionMode: 'sse', reviewModel: 'session', subagentBackend: 'dsh', subagentBackendAvailable: false, subagentRuntimeInstalled: preferenceStatus.value.subagentRuntimeInstalled, ...IMAGE_FEATURE_DEFAULTS, imageModel: 'gpt-image-2', imageQuality: 'auto', quickQuotaMode: QUICK_QUOTA_MODE_BAR, searchProvider: 'dsh', speedMode: SPEED_MODE_FAST, outputVerbosity: OUTPUT_VERBOSITY_DEFAULT, inputImageDetail: 'high', streamIdleTimeoutMinutes: 5, contextMode: CONTEXT_MODE_EXTENDED, customContextWindow: 500_000, customContextGpt54: 1_000_000, customContextGpt54Mini: 400_000, customContextGpt55: 1_000_000, customContextGpt56: 1_000_000, customContextGpt6Astra: 272_000, contextModels: activeContextModels, availableModels: preferenceStatus.value.availableModels, verbosityModels, fastModels: preferenceStatus.value.fastModels, ultrafastModels: preferenceStatus.value.ultrafastModels, catalogStatus: preferenceStatus.value.catalogStatus, customContextModels: {}, searchMode: 'live', searchDomains: [], quotaAlerts: 'important', quotaShortThreshold: 20, quotaLongThreshold: 20, writable: true },
   })
+  assert.equal(host.registered[0].adapter.current().profiles.get('openai-codex').streamIdleTimeoutMs, 5 * 60 * 1000)
+  await host.request('preferences/update', { [STREAM_IDLE_TIMEOUT_MINUTES_FIELD]: 10 }, signal)
+  assert.equal(host.registered[0].adapter.current().profiles.get('openai-codex').streamIdleTimeoutMs, 10 * 60 * 1000)
+  const downstream = { kind: 'downstream' }
+  const requestErrorListener = host.listeners.find(listener => listener.event === 'agent/request-error')!.listener
+  assert.equal(await requestErrorListener({
+    provider: 'openai-codex',
+    failure: { code: 'RATE_LIMIT', message: 'quota reached' },
+    signal,
+  }, async () => downstream), downstream)
   assert.deepEqual(host.webUpdates.at(-1), {
     config: { searchProvider: 'deepseek-official', fetchProvider: 'local' },
     noSave: true,
@@ -402,6 +487,33 @@ test('plugin registers one Codex route, subscription image tool, and DSH-trusted
     ok: false,
     error: { code: 'internal', message: 'Invalid quick quota preference', details: { issues: [] } },
   })
+  assert.deepEqual(await host.request('preferences/update', { [AUTO_QUOTA_RETRY_FIELD]: 'yes' }, signal), {
+    ok: false,
+    error: { code: 'internal', message: 'Invalid automatic quota retry preference', details: { issues: [] } },
+  })
+})
+
+test('successful account changes wake parked quota recovery while failed changes do not', async () => {
+  let succeeds = true
+  let wakes = 0
+  const handler = plugin.createSubscriptionRpcHandler({
+    authHandler: async (endpoint: string) => succeeds
+      ? { ok: true, value: { authenticated: endpoint !== 'logout' } }
+      : { ok: false, error: { code: 'internal', message: 'account change failed', details: { issues: [] } } },
+    usageReader: { clearCache() {}, clearScope() {}, clear() {} },
+    resetCreditService: { clear() {} },
+    onAccountChanged: () => { wakes += 1 },
+  } as unknown as Parameters<typeof plugin.createSubscriptionRpcHandler>[0])
+  const signal = new AbortController().signal
+
+  assert.equal((await handler('account/select', { id: 'account-b' }, signal)).ok, true)
+  assert.equal((await handler('account/remove', { id: 'account-a' }, signal)).ok, true)
+  assert.equal((await handler('login/status', {}, signal)).ok, true)
+  assert.equal((await handler('logout', {}, signal)).ok, true)
+  assert.equal(wakes, 4)
+  succeeds = false
+  assert.equal((await handler('account/select', { id: 'missing' }, signal)).ok, false)
+  assert.equal(wakes, 4)
 })
 
 test('Codex base prompt opt-in appends only the selected model and preserves DSH assembly', async () => {
@@ -454,6 +566,21 @@ test('Astra custom context is persisted through settings RPC with its audited bo
   }
 })
 
+test('forecast cache management exposes only its size and delegates serialized clearing', async () => {
+  let clears = 0
+  const handler = plugin.createSubscriptionRpcHandler({ usageReader: {
+    clear: async () => { clears++ },
+    storage: async () => ({ bytes: clears ? 0 : 128, limit: 262144 }),
+  } } as unknown as Parameters<typeof plugin.createSubscriptionRpcHandler>[0])
+  assert.deepEqual(await handler('storage/status', {}, new AbortController().signal), { ok: true, value: { bytes: 128, limit: 262144 } })
+  assert.equal(clears, 0)
+  assert.deepEqual(await handler('storage/clear-forecast', { path: 'ignored' }, new AbortController().signal), { ok: true, value: { bytes: 0, limit: 262144 } })
+  assert.equal(clears, 1)
+  const aborted = AbortSignal.abort()
+  await assert.rejects(handler('storage/clear-forecast', {}, aborted))
+  assert.equal(clears, 1)
+})
+
 test('preferences/models refreshes the catalog before returning the current model surfaces', async () => {
   const calls: unknown[] = []
   let fail = false
@@ -474,7 +601,7 @@ test('preferences/models refreshes the catalog before returning the current mode
   const signal = new AbortController().signal
   assert.deepEqual(await handler('preferences/models', {}, signal), {
     ok: true,
-    value: { contextModels: [{ key: 'gpt-6-astra' }], verbosityModels: ['gpt-6-astra'], fastModels: [], catalogStatus: undefined },
+    value: { availableModels: [], contextModels: [{ key: 'gpt-6-astra' }], verbosityModels: ['gpt-6-astra'], fastModels: [], ultrafastModels: [], catalogStatus: undefined },
   })
   assert.deepEqual(calls, ['refresh', 'status'])
 
@@ -638,10 +765,10 @@ test('catalog diagnostics includes refresh failures without copying private meta
     auth: { status: async () => ({ authenticated: false }) },
     preferences: { status: () => ({}) },
     network: { snapshot: () => ({ catalog: { status: 'failed', stage: 'http', code: 'http-error', httpStatus: 403, route: 'direct', elapsed: 'under-1s', url: 'private-url' } }) },
-    modelCatalog: { status: () => ({ source: 'fallback', refresh: 'failed', accountId: 'private-account' }) },
+    modelCatalog: { status: () => ({ source: 'unavailable', refresh: 'failed', accountId: 'private-account' }) },
   }) as unknown as Parameters<typeof plugin.createSubscriptionDiagnostics>[0]))
-  assert.equal(report.requests.catalog!.httpStatus, 403)
-  assert.deepEqual(report.catalog, { source: 'fallback', refresh: 'failed' })
+  assert.equal(report.requests.catalog.httpStatus, 403)
+  assert.deepEqual(report.catalog, { source: 'unavailable', refresh: 'failed' })
   assert.doesNotMatch(JSON.stringify(report), /private-|accountId|url/)
 })
 
@@ -655,4 +782,48 @@ test('sketch tool is absent until both Beta switches are enabled and removed whe
  assert.equal(registered(),true)
  await host.updateSettings({imageSketchAgent:false})
  assert.equal(registered(),false)
+})
+
+test('the settings default model writes the DSH default a new conversation starts on', async () => {
+  const host = fakeContext()
+  applyPlugin(host.ctx)
+  const signal = new AbortController().signal
+  // The default-model service may mount after this plugin, so a missing service
+  // is reported instead of cached.
+  assert.deepEqual(await host.request('default-model/status', {}, signal), {
+    ok: true,
+    value: { available: false, managed: false },
+  })
+  assert.deepEqual(await host.request('default-model/select', { model: 'gpt-5.6-terra' }, signal), {
+    ok: false,
+    error: { code: 'unavailable', message: 'Could not save the default model', details: { issues: [] } },
+  })
+
+  let selection: {provider: string; model: string; reasoningEffort?: string} = { provider: 'deepseek-account', model: 'deepseek-flash', reasoningEffort: 'high' }
+  const writes: Record<string, unknown>[] = []
+  host.ctx.provide('agentDefaultModel', {
+    currentSelection: () => ({ ...selection }),
+    async saveSelection(next: typeof selection) {
+      writes.push({ ...next })
+      selection = { ...next }
+    },
+  })
+  assert.deepEqual(await host.request('default-model/status', {}, signal), {
+    ok: true,
+    value: { available: true, managed: false, provider: 'deepseek-account', model: 'deepseek-flash', reasoningEffort: 'high' },
+  })
+  assert.deepEqual(await host.request('default-model/select', { model: 'gpt-5.6-terra' }, signal), {
+    ok: true,
+    value: { available: true, managed: true, provider: 'openai-codex', model: 'gpt-5.6-terra' },
+  })
+  assert.deepEqual(writes, [{ provider: 'openai-codex', model: 'gpt-5.6-terra' }])
+  assert.deepEqual(await host.request('default-model/select', { model: 'gpt 5.6' }, signal), {
+    ok: false,
+    error: { code: 'invalid-input', message: 'Invalid default model', details: { issues: [] } },
+  })
+  assert.deepEqual(await host.request('default-model/select', {}, signal), {
+    ok: false,
+    error: { code: 'invalid-input', message: 'Invalid default model', details: { issues: [] } },
+  })
+  assert.equal(writes.length, 1, 'a rejected selection never reaches the host service')
 })

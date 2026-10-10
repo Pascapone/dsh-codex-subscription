@@ -57,6 +57,43 @@ test('only OpenAI auth requests use the temporary proxy-aware fetch', async () =
   }
 })
 
+test('a fetch captured by another plugin remains usable after the Codex scope ends', async () => {
+  const original = globalThis.fetch
+  globalThis.fetch = async input => new Response(`direct:${input}`)
+  try {
+    let capturedFetch: typeof fetch | undefined
+    await withCodexNetwork(async () => {
+      capturedFetch = globalThis.fetch
+    }, { env: {} })
+
+    assert.equal(globalThis.fetch === capturedFetch, false)
+    assert.ok(capturedFetch)
+    const response = await capturedFetch('https://ilinkai.weixin.qq.com/ilink/bot/msg/notifystart')
+    assert.equal(await response.text(), 'direct:https://ilinkai.weixin.qq.com/ilink/bot/msg/notifystart')
+  } finally {
+    globalThis.fetch = original
+  }
+})
+
+test('a third-party fetch wrapper installed during the scope survives its teardown', async () => {
+  const original = globalThis.fetch
+  globalThis.fetch = async input => new Response(`direct:${input}`)
+  try {
+    let thirdPartyFetch: typeof fetch | undefined
+    await withCodexNetwork(async () => {
+      const capturedFetch = globalThis.fetch
+      thirdPartyFetch = (...args: Parameters<typeof fetch>) => capturedFetch(...args)
+      globalThis.fetch = thirdPartyFetch
+    }, { env: {} })
+
+    assert.equal(globalThis.fetch, thirdPartyFetch)
+    const response = await globalThis.fetch('https://example.test/from-other-plugin')
+    assert.equal(await response.text(), 'direct:https://example.test/from-other-plugin')
+  } finally {
+    globalThis.fetch = original
+  }
+})
+
 test('concurrent OAuth attempts never inherit another attempt proxy', async () => {
   const original = globalThis.fetch
   const calls: unknown[] = []

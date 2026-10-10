@@ -1,6 +1,8 @@
+
 import type { IncomingMessage } from 'node:http';
 import type { FetchInput, FetchInit, NetworkScope, NetworkOptions, NetworkRoute, NetworkAttempt, ProxyOptions } from './network-types.js';
 import { execFile } from 'node:child_process'
+import { createDiagnosticEvents } from './diagnostic-events.js'
 import { request as httpsRequest } from 'node:https'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { PassThrough, Readable } from 'node:stream'
@@ -201,18 +203,19 @@ export async function withCodexNetwork<T>(run: () => T | Promise<T>, options: Ne
   }
   if (options.websocket) activeWebSocketScopes += 1
   if (activeScopes === 0) {
-    baseFetch = globalThis.fetch
+    const fetchBeforeScope = globalThis.fetch
+    baseFetch = fetchBeforeScope
     scopedFetch = async (input, init) => {
       const scope = networkScope.getStore()
-      if (scope === undefined) return baseFetch!(input, init)
+      if (scope === undefined) return fetchBeforeScope(input, init)
       const { options: scopedOptions, allowedHosts, resolved } = scope
       const proxyFetch = scopedOptions.fetchThroughProxy ?? fetchThroughProxy
       const target = new URL(typeof input === 'string' || input instanceof URL ? input : input.url)
       if (target.protocol === 'http:' && isHeadroomResponseTarget(target, scopedOptions)) {
-        const response = await baseFetch!(input, init)
+        const response = await fetchBeforeScope(input, init)
         return scopedOptions.transformResponse?.(response, target) ?? response
       }
-      if (target.protocol !== 'https:' || !allowedHosts.has(target.hostname)) return baseFetch!(input, init)
+      if (target.protocol !== 'https:' || !allowedHosts.has(target.hostname)) return fetchBeforeScope(input, init)
       let proxy = resolved.get(target.hostname)
       if (proxy === undefined) {
         proxy = resolveCodexProxy({ ...scopedOptions, target })
@@ -220,7 +223,7 @@ export async function withCodexNetwork<T>(run: () => T | Promise<T>, options: Ne
       }
       const route = await proxy
       scopedOptions.onRoute?.(route.source)
-      const response = await (route.url === undefined ? baseFetch!(input, init) : proxyFetch(input, init, route.url))
+      const response = await (route.url === undefined ? fetchBeforeScope(input, init) : proxyFetch(input, init, route.url))
       return scopedOptions.transformResponse?.(response, target) ?? response
     }
     globalThis.fetch = scopedFetch
@@ -269,6 +272,8 @@ const elapsedBucket = (elapsed: number): NetworkAttempt['elapsed'] => elapsed < 
 export function createCodexNetworkTransport(options: NetworkOptions = {}) {
   const attempts = new Map<string, NetworkAttempt>()
   const now = options.now ?? Date.now
+  const evidence = createDiagnosticEvents({ now })
+  const remember = (area: string, value: NetworkAttempt) => { attempts.set(area, value); evidence.record(area, value) }
   const run = async <T>(area: string, operation: () => T | Promise<T>, connection: NetworkOptions = {}): Promise<T> => {
     const startedAt = now()
     let route: NetworkRoute = attempts.get(area)?.route ?? 'direct'
@@ -276,18 +281,19 @@ export function createCodexNetworkTransport(options: NetworkOptions = {}) {
     try {
       const value = await withCodexNetwork(operation, { ...options, ...connection, onRoute: source => { route = source; routed = true } })
       if (value instanceof Response && !value.ok) {
-        attempts.set(area, { status: 'failed', stage: 'http', code: 'http-error', httpStatus: value.status, route, elapsed: elapsedBucket(now() - startedAt) })
+        remember(area, { status: 'failed', stage: 'http', code: 'http-error', httpStatus: value.status, route, elapsed: elapsedBucket(now() - startedAt) })
       } else if (routed || value instanceof Response) {
-        attempts.set(area, { status: 'ok', route, elapsed: elapsedBucket(now() - startedAt) })
+        remember(area, { status: 'ok', route, elapsed: elapsedBucket(now() - startedAt) })
       }
       return value
     } catch (error) {
-      if (routed) attempts.set(area, { status: 'failed', stage: 'transport', code: classifyTransportError(error), route, elapsed: elapsedBucket(now() - startedAt) })
+      if (routed) remember(area, { status: 'failed', stage: 'transport', code: classifyTransportError(error), route, elapsed: elapsedBucket(now() - startedAt) })
       throw error
     }
   }
   return Object.freeze({
     run,
+    history: evidence.snapshot,
     fetch: (area: string, input: FetchInput, init?: FetchInit) => run(area, () => globalThis.fetch(input, init)),
     snapshot: () => Object.fromEntries([...attempts].map(([area, value]) => [area, { ...value }])),
   })
