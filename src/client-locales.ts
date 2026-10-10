@@ -1,4 +1,10 @@
 export const zh = {
+  effort_none: '无', effort_minimal: '最低', effort_low: '低', effort_medium: '中', effort_high: '高', effort_xhigh: '很高', effort_max: '最高',
+  codexModelPicker: 'Codex 模型选择器', codexModelPickerHint: '蓝色推理滑块，仅列出 Codex 模型。关闭后恢复 DSH 默认选择器。',
+  runtimeOptions: '运行中更改选项', runtimeOptionsHint: '运行中显示红色滑块。模型、推理和 Fast 更改需确认，下次请求生效；关闭后拒绝新的运行中更改。',
+  runOptions: '运行选项', runConfirmTitle: '更改下一次请求？', runConfirmHint: '当前请求与工具继续运行。确认后，此会话的下一次请求使用以下选项。',
+  runConfirm: '确认更改', runQueued: '已确认，下次请求生效', runSaving: '正在保存…', runFailed: '更改失败：{value}', effortReset: '恢复模型默认推理',
+
   runtimeIncompatible: '检测到不兼容的 Codex 子任务组件，请卸载后重启，再安装受支持版本。',
   runtimeManagedElsewhere: '此组件由宿主或其他依赖管理，请在 DSH 插件管理中查看；这里不能直接卸载。',
   runtimeLoading: '正在检查组件…', runtimeRestart: '组件已更新，请重启 DSH 后使用。',
@@ -140,6 +146,12 @@ export const zh = {
 }
 
 export const en = {
+  effort_none: 'None', effort_minimal: 'Minimal', effort_low: 'Low', effort_medium: 'Medium', effort_high: 'High', effort_xhigh: 'Very high', effort_max: 'Maximum',
+  codexModelPicker: 'Codex model picker', codexModelPickerHint: 'Blue reasoning slider with Codex models only. Off restores the default DSH picker.',
+  runtimeOptions: 'Change options during a run', runtimeOptionsHint: 'Red slider while running. Model, reasoning and Fast changes require confirmation and apply to the next request. Off rejects new live changes.',
+  runOptions: 'Run options', runConfirmTitle: 'Change the next request?', runConfirmHint: 'The current request and tools keep running. After confirmation, the next request in this session uses these options.',
+  runConfirm: 'Confirm change', runQueued: 'Confirmed for the next request', runSaving: 'Saving…', runFailed: 'Change failed: {value}', effortReset: 'Reset reasoning to the model default',
+
   runtimeIncompatible: 'An incompatible Codex subtask component was found. Uninstall it, restart DSH, then install the supported version.',
   runtimeManagedElsewhere: 'This component is managed by the host or another dependency. Check DSH plugin management; it cannot be removed here.',
   runtimeLoading: 'Checking component…', runtimeRestart: 'Component changed. Restart DSH before using it.',
@@ -278,4 +290,17 @@ export const en = {
   imageGenerate: 'Generate image', imageBeta: 'Beta', imageGenerating: 'Generating…', imageGenerated: 'Generated', imageFailed: 'Generation failed',
   imageLabel: 'Generated image', imageOpen: 'View image', imageOpenNamed: 'View {value}', imageLoading: 'Loading image…', imageLoadFailed: 'Image failed to load. Click to retry', imagePreview: 'Image preview',  imageClosePreview: 'Close preview', imageDownload: 'Download', imageDownloadPreparing: 'Preparing original…', imageDownloadFailed: 'Download failed. Retry',   imageFit: 'Fit to window',
   imageAnnotate: 'Annotate', imageAnnotateCancel: 'Cancel marking', imageAnnotateHint: 'Click the image to add a numbered note', imageAnnotation: 'Note {value}', imageAnnotationPlaceholder: 'Describe what should change in this area', imageRegions: 'Region notes', imageCopyNotes: 'Copy notes', imageCopied: 'Copied', imagePrevious: 'Previous image', imageNext: 'Next image', imageZoomHint: 'Wheel to zoom · drag to pan · double-click for 100%', imageActual: '100%',  imageEditDefault: 'Edit this image.', imageRegionNotes: 'Region changes:', imageEdit: 'Continue editing in composer', imageEditPreparing: 'Adding to composer…', imageEditFailed: 'Handoff failed. Add a note to every marker and ensure the composer accepts images, then retry.', imageRemoveAnnotation: 'Remove note',
+}
+
+export const de = {
+  ...en,
+  codexModelPicker: 'Codex-Modellauswahl', codexModelPickerHint: 'Blauer Reasoning-Regler mit ausschließlich Codex-Modellen. Aus stellt die normale DSH-Auswahl wieder her.',
+  runtimeOptions: 'Optionen im laufenden Run ändern', runtimeOptionsHint: 'Roter Regler während des Runs. Modell, Reasoning und Fast werden erst nach Bestätigung beim nächsten Request geändert. Aus sperrt neue Laufzeitänderungen.',
+  runOptions: 'Run-Optionen', runConfirmTitle: 'Nächsten Request umstellen?', runConfirmHint: 'Der aktuelle Request und laufende Tools laufen weiter. Nach Bestätigung gelten diese Optionen ab dem nächsten Request dieser Session.',
+  runConfirm: 'Änderung bestätigen', runQueued: 'Bestätigt; gilt ab dem nächsten Request', runSaving: 'Wird gespeichert…', runFailed: 'Änderung fehlgeschlagen: {value}', effortReset: 'Reasoning auf Modellstandard zurücksetzen',
+  effort_none: 'Kein', effort_minimal: 'Minimal', effort_low: 'Niedrig', effort_medium: 'Mittel', effort_high: 'Hoch', effort_xhigh: 'Sehr hoch', effort_max: 'Maximum',
+  modelLabel: 'Modell', effortLabel: 'Reasoning Effort', providerDefault: 'Modellstandard', selectModel: 'Modell auswählen', modelClose: 'Modellauswahl schließen', modelBack: 'Zurück',
+  modelMenuAria: 'Codex-Modell und Reasoning auswählen', modelsLoading: 'Modelle werden geladen…', modelsEmpty: 'Keine Codex-Modelle verfügbar.', modelRetry: 'Erneut versuchen', modelFailed: 'Modelle konnten nicht geladen werden: {value}', effortsEmpty: 'Dieses Modell bietet keine Reasoning-Stufen.',
+  speedTitle: 'Geschwindigkeit', speedStandard: 'Standard', speedStandardHint: 'Normale Geschwindigkeit', speedFast: 'Fast', speedFastHint: 'Priorisierte Verarbeitung; Geschwindigkeit variiert je Modell, höherer Credits-Verbrauch',
+  cancel: 'Abbrechen', settingsTab_display: 'Einstellungen', settingsTab_advanced: 'Erweitert', preferenceFailed: 'Die Einstellung wurde nicht gespeichert.', preferenceRetry: 'Erneut versuchen',
 }

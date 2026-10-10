@@ -1,3 +1,7 @@
+export declare const MODEL_CONTROL_DEFAULTS: {
+    readonly codexModelPicker: true;
+    readonly runtimeOptions: true;
+};
 export declare const PREFERENCE_FIELDS: Readonly<{
     readonly compactionMode: {
         readonly choices: readonly ["dsh", "cloud"];

@@ -16,6 +16,7 @@ export type RpcResponseMap = {
   'reset-credit/inspect': { availableCount: number; credits: PublicResetCredit[]; nextExpiresAt?: number };
   'reset-credit/prepare': PublicResetChallenge; 'reset-credit/consume': { code: string; windowsReset?: string[]; windowsResetCount?: number };
   'image/original/chunk': unknown; 'transcription/transcribe': { text: string };
+  'run-options/apply': { selected: { provider: string; model: string; reasoningEffort?: string }; speedMode: 'standard' | 'fast'; queued: true };
   'sketch/connect': { token: string }; 'sketch/poll': SketchTaskDelivery[]; 'sketch/claim': boolean; 'sketch/result': null; 'sketch/disconnect': null;
 };
 export type RpcResponse<E extends string> = E extends keyof RpcResponseMap ? RpcResponseMap[E] : unknown;

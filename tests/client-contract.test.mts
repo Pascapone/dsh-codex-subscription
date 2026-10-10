@@ -200,7 +200,7 @@ test('settings offer ready-to-use context presets and keep custom limits out of 
   assert.doesNotMatch(composer, /customContextWindow|contextMode/u)
 })
 
-test('stable speed control is persisted inside the model menu and hidden from the composer while standard', async () => {
+test('Codex-only model picker uses the compact effort slider and a confirmed red runtime path', async () => {
   const [client, host, contract] = await Promise.all([
     text('src/client.jsx'), text('src/index.js'), text('src/settings-contract.js'),
   ])
@@ -217,8 +217,17 @@ test('stable speed control is persisted inside the model menu and hidden from th
   assert.match(client, /function CodexModelSelect/u)
   assert.match(client, /slots\.inject\(['"]conversation\.input\.model['"]/u)
   assert.match(client, /name:\s*['"]conversation\.input\.model['"][\s\S]*?priority:\s*-10/u)
-  assert.match(client, /pane === ['"]speed['"]/u)
-  assert.match(client, /speedSupported &&[\s\S]*?t\(['"]speedTitle['"]\)/u)
+  assert.match(client, /state\.groups\.filter\(group => group\.id === 'openai-codex'\)/u)
+  assert.match(client, /type="range"[\s\S]*?step=\{1\}/u)
+  assert.match(client, /role="switch" aria-checked=\{fast\}/u)
+  assert.match(client, /<dialog[\s\S]*?runConfirmTitle/u)
+  assert.match(client, /run-options\/apply/u)
+  assert.match(client, /sessionId: confirmation\.sessionId/u)
+  assert.match(client, /data-runtime=\{runtime \|\| undefined\}/u)
+  assert.match(client, /--codex-effort-accent:var\(--dsw-alias-state-error-primary\)/u)
+  assert.match(client, /codexModelPicker[\s\S]*?removePicker\?\.\(\)/u)
+  assert.match(client, /snapshot\[field\]/u)
+  assert.match(client, /runtime \? busy \|\| !speedWritable : locked \|\| running \|\| busy/u)
   assert.match(client, /fast && <BoltIcon className=['"]codexModelSelectBolt['"]/u)
   assert.match(client, /pane === 'root' \? <>[\s\S]*?\{submenu\}/u, 'the selected pane replaces the root menu instead of opening alongside it')
   assert.match(client, /onClick=\{backToRoot\}[^>]*><IconChevronLeftOutline14/u, 'the pane has a back action')

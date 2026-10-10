@@ -6,6 +6,8 @@ import {
   CONTEXT_MODE_FIELD, CONTEXT_MODE_STANDARD, CONTEXT_MODE_EXTENDED, CONTEXT_MODE_CUSTOM, DEFAULT_CONTEXT_MODE,
 } from './settings-contract.js'
 
+export const MODEL_CONTROL_DEFAULTS = { codexModelPicker: true, runtimeOptions: true } as const;
+
 // One enum contract feeds persisted Host schemas and RPC writes.
 export const PREFERENCE_FIELDS = Object.freeze({
   compactionMode: { choices: ['dsh', 'cloud'], default: 'dsh', error: 'Invalid compaction mode' },

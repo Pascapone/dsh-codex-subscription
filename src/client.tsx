@@ -22,7 +22,7 @@ import { SKETCH_CSS } from './sketch-workspace.js'
 import { ImageWorkspace } from './image-workspace.js'
 import { attachImageFiles, appendImagePrompt } from './image-composer.js'
 import { createSketchTrigger, createImageTrigger } from './sketch-trigger.js'
-import { zh, en } from './client-locales.js'
+import { zh, en, de } from './client-locales.js'
 import { STYLE } from './client-styles.js'
 import { createAnnotatedImageReference } from './image-edit-reference.js'
 import { SubscriptionImageViewerOverlay } from './subscription-image-viewer-overlay.js'
@@ -50,7 +50,7 @@ export const inject = [
 
 export function apply(ctx: Context) {
   const imageViewer = new SubscriptionImageViewerService()
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'codex-subscription: copy')
+  ctx.effect(() => { const builtins = ctx.locale.register(NS, { zh, en }); const german = ctx.locale.register(NS, 'de', de); return () => { builtins(); german() } }, 'codex-subscription: copy')
   ctx.effect(() => {
     const tag = document.createElement('style')
     tag.dataset.plugin = 'dsh-codex-subscription'
@@ -118,20 +118,31 @@ export function apply(ctx: Context) {
         directory: modelDirectories.directoryFor(sessionId).store,
       }),
     }, CodexComposerQuota))
-    scope.slots.inject('conversation.input.model', () => scope.slots.register({
-      name: 'conversation.input.model', priority: -10, locale: NS,
-      inject: sessionId => {
-        const directory = modelDirectories.directoryFor(sessionId)
-        const available = sessions.subagentAddress(sessionId) === undefined
-        return {
-          available,
-          directory: directory.store,
-          load: () => { if (available) void directory.load() },
-          select: (selection: ModelSelection) => available ? directory.select(selection).then(() => true, () => false) : Promise.resolve(false),
-          preference,
-          sessionId,
-        }
-      },
+    const modelProps = (sessionId: SessionId) => {
+      const directory = modelDirectories.directoryFor(sessionId)
+      const available = sessions.subagentAddress(sessionId) === undefined
+      return {
+        available, directory: directory.store,
+        load: () => { if (available) void directory.load() },
+        select: (selection: ModelSelection) => available ? directory.select(selection).then(result => result?.ok === true, () => false) : Promise.resolve(false),
+        preference, rpc, sessionId,
+      }
+    }
+    scope.effect(() => {
+      let removePicker: (() => void) | undefined
+      const syncPicker = () => {
+        if (preference.getSnapshot().codexModelPicker) removePicker ??= scope.slots.inject('conversation.input.model', () => scope.slots.register({
+          name: 'conversation.input.model', priority: -10, locale: NS, inject: modelProps,
+        }, CodexModelSelect))
+        else { removePicker?.(); removePicker = undefined }
+      }
+      syncPicker()
+      const unwatch = preference.subscribe(syncPicker)
+      return () => { unwatch(); removePicker?.() }
+    }, 'codex-subscription: optional Codex model picker')
+    scope.slots.inject('conversation.input.left', () => scope.slots.register({
+      name: 'conversation.input.left', id: 'codex-run-options', order: 10, locale: NS,
+      inject: sessionId => ({ ...modelProps(sessionId), runtime: true, locked: false }),
     }, CodexModelSelect))
   }
   if (ctx.get('remote.session') === undefined) installDirectorySlots(ctx)

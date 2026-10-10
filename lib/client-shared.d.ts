@@ -19,6 +19,8 @@ export declare const usePreferenceSnapshot: (preference: PreferenceController) =
     connectionMode: string;
     compactionMode: string;
     codexBasePrompt: boolean;
+    codexModelPicker: boolean;
+    runtimeOptions: boolean;
     subagentBackend: string;
     subagentBackendAvailable: boolean;
     subagentRuntimeInstalled: boolean;

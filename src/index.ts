@@ -7,7 +7,8 @@ import type { SubscriptionProviderOptions } from './runtime-types.js';
 // ponytail: preserve legacy custom-profile retry omission for the audited SDK cohorts; widen when the adapter requires new resolved fields.
 type SubscriptionProfile = Omit<ResolvedPiAiProviderProfile, 'retryPolicy'>;
 import { createSettingsAdapter } from './settings-adapter.js'
-import { PREFERENCE_FIELDS } from './preference-fields.js'
+import { MODEL_CONTROL_DEFAULTS, PREFERENCE_FIELDS } from './preference-fields.js'
+import { createRunOptions } from './run-options.js'
 import { createSubscriptionConnection } from './subscription-connection.js'
 import { createCompactionBridge } from './subscription-compaction.js'
 import { registerSubscriptionTransport } from './subscription-transport.js'
@@ -109,6 +110,7 @@ const settingsFields = {
   [QUOTA_ALERTS_FIELD]: z.union(QUOTA_ALERT_MODES).default('important'),
   transcriptionEnabled: z.boolean().default(false),
   codexBasePrompt: z.boolean().default(false),
+  ...Object.fromEntries(Object.entries(MODEL_CONTROL_DEFAULTS).map(([key, value]) => [key, z.boolean().default(value)])),
   [LEGACY_QUICK_QUOTA_FIELD]: z.boolean(),
   [CUSTOM_CONTEXT_WINDOW_FIELD]: z.number().step(1).min(128_000).max(1_000_000).default(DEFAULT_CUSTOM_CONTEXT_WINDOW),
   ...Object.fromEntries((Object.entries(CUSTOM_CONTEXT_MODEL_FIELDS) as [keyof typeof CUSTOM_CONTEXT_MODEL_FIELDS, string][]).map(([modelKey, field]) => [field, z.number().step(1).min(128_000).max(CUSTOM_CONTEXT_MODEL_CAPS[modelKey as keyof typeof CUSTOM_CONTEXT_MODEL_CAPS]).default(CUSTOM_CONTEXT_MODEL_DEFAULTS[modelKey as keyof typeof CUSTOM_CONTEXT_MODEL_DEFAULTS])])),
@@ -149,10 +151,12 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
     baseModels: () => baseProvider.getModels(),
     fetch: (input, init) => network.fetch('catalog', input, init),
   })
+  const runOptions = createRunOptions(ctx, settings, model => modelCatalog.metadata(model)?.supportsFast ?? supportsCodexFastMode(model))
   ctx.inject(['systemPrompt'], scoped => scoped.effect(() => scoped.on('system-prompt/assemble', async (_input, _context, next) => {
     const assembled = await next()
-    const prompt = settings.get().codexBasePrompt === true && assembled.variables.provider === PROVIDER
-      ? modelCatalog.basePrompt(assembled.variables.model!) : undefined
+    const selected = runOptions.selectionFor(ctx.get?.('agents')?.currentInitiator?.()?.id) ?? assembled.variables
+    const prompt = settings.get().codexBasePrompt === true && selected.provider === PROVIDER
+      ? modelCatalog.basePrompt(selected.model!) : undefined
     return prompt ? { ...assembled, sections: [...assembled.sections, { name: 'codex-subscription/base-prompt', text: prompt, interpolate: false }] } : assembled
   }, { prepend: true }), 'codex-subscription: optional model base prompt'))
   const connection = createSubscriptionConnection({ resolveMode: () => settings.get().connectionMode as 'sse' | 'websocket' })
@@ -169,7 +173,7 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
     connection,
     compaction,
     resolveRoute: request => (ctx.get?.('headroomRoute') as { resolve?: NonNullable<SubscriptionProviderOptions['resolveRoute']> } | undefined)?.resolve?.(request),
-    resolveSpeedMode: sessionId => settings.get()[SESSION_SPEED_MODES_FIELD]?.[sessionId!] as SpeedMode | undefined,
+    resolveSpeedMode: runOptions.speedFor,
     resolveOutputVerbosity: () => normalizeOutputVerbosity(settings.get()[OUTPUT_VERBOSITY_FIELD]),
     resolveContextMode: () => normalizeContextMode(settings.get()[CONTEXT_MODE_FIELD]),
     resolveCustomContextWindow: modelKey => {
@@ -195,6 +199,8 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
         settings.get()[LEGACY_QUICK_QUOTA_FIELD],
       ),
       codexBasePrompt: settings.get().codexBasePrompt === true,
+      codexModelPicker: settings.get().codexModelPicker !== false,
+      runtimeOptions: settings.get().runtimeOptions !== false,
       [SEARCH_PROVIDER_FIELD]: settings.get()[SEARCH_PROVIDER_FIELD],
       [SPEED_MODE_FIELD]: settings.get()[SPEED_MODE_FIELD],
       [SESSION_SPEED_MODES_FIELD]: settings.get()[SESSION_SPEED_MODES_FIELD] ?? {},
@@ -208,7 +214,15 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
       fastModels: provider.getModels().filter(model => modelCatalog.metadata(model.id)?.supportsFast ?? supportsCodexFastMode(model.id)).map(model => model.id),
       writable: ctx.settings.writable,
     }),
-    setSpeed: (sessionId: string, speedMode: SpeedMode) => settings.setSessionSpeed(sessionId, speedMode),
+    setSpeed: async (sessionId: string, speedMode: SpeedMode) => {
+      const controller = ctx.get?.('sessionController')
+      if (controller) {
+        const found = await controller.resolveAgent(sessionId as Parameters<typeof controller.resolveAgent>[0])
+        if ('error' in found) throw new Error(found.error.message)
+        if (found.agent.status === 'running') throw new Error('Use confirmed run options while the session is running')
+      }
+      return settings.setSessionSpeed(sessionId, speedMode)
+    },
     update: async (patch: Record<string, unknown>) => {
       if (Object.hasOwn(patch, 'subagentBackend')) {
         if (!subagentBackend) throw new Error('DSH subagent services are unavailable')
@@ -436,7 +450,16 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
     ),
   })
 
-  const handler=(endpoint: string,payload: unknown,signal: AbortSignal)=>endpoint.startsWith('sketch/')?sketchBridge.rpc(endpoint,payload):subscriptionHandler(endpoint,payload,signal)
+  const handler = async (endpoint: string, payload: unknown, signal: AbortSignal) => {
+    if (endpoint === 'run-options/apply') {
+      try { return { ok: true as const, value: await runOptions.apply(payload, signal) } }
+      catch (error) {
+        if (signal.aborted) throw error
+        return { ok: false as const, error: { code: 'run-options/rejected', message: error instanceof Error ? error.message : 'Run option change failed', details: { issues: [] } } }
+      }
+    }
+    return endpoint.startsWith('sketch/') ? sketchBridge.rpc(endpoint, payload) : subscriptionHandler(endpoint, payload, signal)
+  }
   // Cordis 4.0.4 accepts nullable side effects; its declaration requires a disposer.
   ctx.effect(((): undefined => {
     void modelCatalog.refresh().catch(error => ctx.logger?.debug?.('could not refresh Codex model catalog: %s', (error as Error).message))

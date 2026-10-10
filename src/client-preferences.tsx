@@ -7,6 +7,7 @@ import { Button, IconChevronDownOutline14, Input, Menu } from './client-primitiv
 import { CONTEXT_MODE_CUSTOM, CONTEXT_MODE_EXTENDED, CONTEXT_MODE_FIELD, CONTEXT_MODE_STANDARD, clampModelContext, MIN_CUSTOM_CONTEXT_WINDOW, formatContextWindow, parseContextWindow, QUICK_QUOTA_MODE_BAR, QUICK_QUOTA_MODE_FORECAST, QUICK_QUOTA_MODE_FIELD, QUICK_QUOTA_MODE_OFF, QUICK_QUOTA_MODE_PERCENT, SEARCH_PROVIDER_AUTO, SEARCH_PROVIDER_CODEX, SEARCH_PROVIDER_DSH, SEARCH_PROVIDER_FIELD } from './settings-contract.js'
 import { reconcileContextDrafts } from './context-draft-state.js'
 import { fill, usePreferenceSnapshot } from './client-shared.js'
+import { MODEL_CONTROL_DEFAULTS } from './preference-fields.js'
 export function QuickQuotaPreference({ preference, t }: Pick<CodexUiProps, 'preference' | 't'>) {
   const snapshot = usePreferenceSnapshot(preference)
   const writable = snapshot.status === 'ready' && snapshot.writable === true
@@ -144,6 +145,10 @@ export function PreferencesCard({ preference, rpc, t, section = "display" }: Pic
       </section>
     </> : <>
       <QuickQuotaPreference preference={preference} t={t} />
+      {Object.keys(MODEL_CONTROL_DEFAULTS).map(field => <div className="codexSubscriptionPreference" key={field}>
+        <div className="codexSubscriptionPreferenceCopy"><span className="codexSubscriptionPreferenceLabel">{t(field)}</span><span className="codexSubscriptionPreferenceHint">{t(`${field}Hint`)}</span></div>
+        <input type="checkbox" role="switch" aria-label={t(field)} aria-checked={snapshot[field as 'codexModelPicker' | 'runtimeOptions']} checked={snapshot[field as 'codexModelPicker' | 'runtimeOptions']} disabled={!snapshot.writable || snapshot.saving} onChange={event => { void preference.set({ [field]: event.currentTarget.checked }) }} />
+      </div>)}
       <CapabilityPreferences preference={preference} t={t} section="quota" />
     </>}
     {snapshot.error ? <div className="codexSubscriptionRecover" role="alert"><p className="codexSubscriptionError">{t('preferenceFailed')}</p><Button type="button" variant="outline" onClick={() => { void preference.retry() }}>{t('preferenceRetry')}</Button></div> : null}

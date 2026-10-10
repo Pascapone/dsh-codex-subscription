@@ -134,6 +134,14 @@ These are reviewed adaptations of [the Codex templates](https://github.com/opena
 
 When the official model catalog exposes GPT-6 Astra, Standard preserves the catalog window, Extended uses 872000 tokens, and Custom accepts 128000–872000 tokens (initially 272000). This limit follows the [official Codex model catalog](https://github.com/openai/codex/blob/6af345407d9c2a568da9d01b6c4b81a9e61495c0/codex-rs/models-manager/models.json#L33-L34), not the API model's total context capacity. These settings only adjust DSH's local context budget; they do not grant model access or guarantee an account's server-side capacity. Actual availability remains subject to the service.
 
+### Model picker and live run options
+
+The Codex picker opens a blue, stepped reasoning slider. Click the effort/model caption to open the model list; only Codex subscription models are shown. The lightning button toggles Standard/Fast and the reset button restores the selected model's default effort.
+
+While a Codex session is running, a separate red control offers the same slider and model list. Model, effort and Fast changes require a confirmation dialog and take effect at the next request assembly, without cancelling the current request or tools. Live changes affect this session only, not the global model default. Native Codex child sessions are not editable through this control.
+
+**Settings → Codex Subscription → Account & preferences** has independent **Codex model picker** and **Change options during a run** switches (both on by default). Disabling the picker restores the shipped DSH picker; disabling live options hides the red control and rejects new live-change requests on the Host. Already confirmed selections remain selected.
+
 ### Composer quota
 
 <p align="center">

@@ -1,26 +1,35 @@
 import type { ModelSelectInjected } from '@deepseek-ai/dsh-client-ui-model-selection/client';
 import type { CodexUiProps } from './client-types.js';
 import type { ReactNode } from 'react';
+import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
 type ModelSelection = Parameters<ModelSelectInjected['select']>[0];
-type ModelProps = Omit<ModelSelectInjected, 'select'> & Pick<CodexUiProps, 'preference' | 't'> & { locked: boolean; sessionId: string; select(selection: ModelSelection): Promise<boolean> };
+type ModelProps = Omit<ModelSelectInjected, 'select'> & Pick<CodexUiProps, 'preference' | 'rpc' | 't'> & Pick<PropsRuntime<'conversation.input.model'>, 'useSession'> & { locked: boolean; sessionId: string; runtime?: boolean; select(selection: ModelSelection): Promise<boolean> };
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import { BoltIcon } from '@heroicons/react/16/solid'
-import { IconCheckOutline16, IconChevronDownOutline14, IconChevronLeftOutline14, IconChevronRightOutline14, IconCloseOutline16 } from './client-primitives.js'
+import { ArrowPathIcon, BoltIcon, CheckIcon as IconCheckOutline16, ChevronDownIcon as IconChevronDownOutline14, ChevronLeftIcon as IconChevronLeftOutline14, ChevronRightIcon as IconChevronRightOutline14, XMarkIcon as IconCloseOutline16 } from '@heroicons/react/16/solid'
+import { CHANNEL, unwrap } from './rpc-contract.js'
 import { OUTPUT_VERBOSITY_DEFAULT, OUTPUT_VERBOSITY_FIELD, OUTPUT_VERBOSITY_HIGH, OUTPUT_VERBOSITY_LOW, OUTPUT_VERBOSITY_MEDIUM, SPEED_MODE_FAST, SPEED_MODE_STANDARD, supportsCodexFastMode } from './settings-contract.js'
 import { fill, usePreferenceSnapshot } from './client-shared.js'
-export function CodexModelSelect({ locked, available, directory, load, select, preference, sessionId, t }: ModelProps) {
+export function CodexModelSelect({ locked, available, directory, load, select, preference, rpc, sessionId, useSession, runtime = false, t }: ModelProps) {
+  const running = useSession(snapshot => snapshot.running)
   const state = useSyncExternalStore(directory.subscribe, directory.getSnapshot)
   const preferenceSnapshot = usePreferenceSnapshot(preference)
   const [open, setOpen] = useState(false)
-  const [pane, setPane] = useState<'root' | 'model' | 'effort' | 'speed' | 'verbosity'>('root')
+  const [pane, setPane] = useState<'root' | 'model' | 'verbosity'>('root')
   const [mobile, setMobile] = useState(() => window.matchMedia('(max-width:700px)').matches)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const backRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const id = useId()
-  const choices = useMemo(() => state.groups.flatMap(group => group.models.map(model => ({
+  const [draftEffort, setDraftEffort] = useState<number | null>(null)
+  const [confirmation, setConfirmation] = useState<{ sessionId: string; selection: ModelSelection; speedMode: 'standard' | 'fast'; expectedModel: string } | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [runError, setRunError] = useState<string | null>(null)
+  const [queued, setQueued] = useState(false)
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const groups = useMemo(() => state.groups.filter(group => group.id === 'openai-codex'), [state.groups])
+  const choices = useMemo(() => groups.flatMap(group => group.models.map(model => ({
     group,
     model,
     selection: {
@@ -28,21 +37,22 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
       model: model.id,
       ...(model.reasoning?.defaultEffort === undefined ? {} : { reasoningEffort: model.reasoning.defaultEffort }),
     },
-  }))), [state.groups])
+  }))), [groups])
   const currentChoice = choices.find(choice => choice.selection.provider === state.current?.provider && choice.selection.model === state.current?.model)
   const reasoning = currentChoice?.model.reasoning
   const effectiveEffort = state.current?.reasoningEffort ?? reasoning?.defaultEffort
+  const effortName = (id: string, fallback: string) => { const label = t(`effort_${id}`); return label === `effort_${id}` ? fallback : label }
   const effortLabel = reasoning === undefined
     ? undefined
     : effectiveEffort === undefined
       ? t('providerDefault')
-      : reasoning.efforts.find(level => level.id === effectiveEffort)?.name ?? effectiveEffort
+      : effortName(effectiveEffort, reasoning.efforts.find(level => level.id === effectiveEffort)?.name ?? effectiveEffort)
   const effortChoices = useMemo<{ key: string; effort?: ModelSelection['reasoningEffort']; label: string; description?: string }[]>(() => reasoning === undefined ? [] : [
     ...(reasoning.defaultEffort === undefined ? [{ key: 'provider-default', effort: undefined, label: t('providerDefault') }] : []),
     ...reasoning.efforts.map(effort => ({
       key: `effort:${effort.id}`,
       effort: effort.id,
-      label: effort.name,
+      label: effortName(effort.id, effort.name),
       ...(effort.description === undefined ? {} : { description: effort.description }),
     })),
   ], [reasoning, t])
@@ -59,7 +69,17 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
     { id: OUTPUT_VERBOSITY_HIGH, label: t('verbosityHigh'), description: t('verbosityHighHint') },
   ]
   const verbosityLabel = verbosityItems.find(item => item.id === preferenceSnapshot.outputVerbosity)?.label ?? t('verbosityDefault')
-  const busy = state.status === 'selecting'
+  const busy = state.status === 'selecting' || saving
+  const effortIndex = Math.max(0, effortChoices.findIndex(level => level.effort === effectiveEffort))
+  const sliderIndex = draftEffort ?? effortIndex
+  const sliderLabel = effortChoices[sliderIndex]?.label ?? effortLabel
+  useEffect(() => { setDraftEffort(null) }, [effectiveEffort, state.current?.model])
+  useEffect(() => { setOpen(false); setPane('root'); setConfirmation(null); setQueued(false); setRunError(null) }, [running, sessionId, available, preferenceSnapshot.runtimeOptions, state.current?.provider])
+  useEffect(() => {
+    if (!confirmation) return
+    dialogRef.current?.showModal()
+    return () => dialogRef.current?.close()
+  }, [confirmation])
 
   useEffect(() => {
     if (available) load()
@@ -83,15 +103,15 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
     return () => document.removeEventListener('pointerdown', closeOutside)
   }, [open, mobile])
   useEffect(() => {
-    if (!speedSupported && pane === 'speed') setPane('root')
     if (!verbositySupported && pane === 'verbosity') setPane('root')
-  }, [pane, speedSupported, verbositySupported])
+  }, [pane, verbositySupported])
   useEffect(() => {
     if (!open) return
     if (pane !== 'root') backRef.current?.focus()
-    else if (mobile) menuRef.current?.querySelector<HTMLButtonElement>('.codexModelSelectCell')?.focus()
+    else if (mobile) menuRef.current?.querySelector<HTMLButtonElement>('.codexEffortTitle')?.focus()
   }, [open, pane, mobile])
-  if (!available) return null
+  if (!available || (runtime && (!running || !preferenceSnapshot.runtimeOptions || state.current?.provider !== 'openai-codex'))
+    || (!runtime && running && preferenceSnapshot.runtimeOptions && state.current?.provider === 'openai-codex')) return null
 
   const close = (restoreFocus = false) => {
     setOpen(false)
@@ -106,23 +126,39 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
       close(true)
       return
     }
+    if (runtime) { setRunError(null); setConfirmation({ sessionId, selection, expectedModel: state.current!.model, speedMode: fast && (preferenceSnapshot.fastModels?.includes(selection.model) ?? supportsCodexFastMode(selection.model)) ? 'fast' : 'standard' }); return }
     void select(selection).then(settleSelection)
   }
   const chooseEffort = (effort: ModelSelection["reasoningEffort"]) => {
     if (state.current === null) return
-    if (effectiveEffort === effort) {
-      close(true)
-      return
-    }
-    void select({
+    if (effectiveEffort === effort) { setDraftEffort(null); return }
+    const selection = {
       provider: state.current.provider,
       model: state.current.model,
       ...(effort === undefined ? {} : { reasoningEffort: effort }),
-    }).then(settleSelection)
+    }
+    if (runtime) { setRunError(null); setConfirmation({ sessionId, selection, expectedModel: state.current!.model, speedMode: fast ? 'fast' : 'standard' }); return }
+    void select(selection).then(accepted => { if (accepted) setDraftEffort(null) })
   }
-  const chooseSpeed = (speedMode: string) => {
-    close(true)
+  const chooseSpeed = (speedMode: 'standard' | 'fast') => {
+    if (runtime && state.current) { setRunError(null); setConfirmation({ sessionId, selection: state.current, expectedModel: state.current.model, speedMode }); return }
     void preference.setSpeed(sessionId, speedMode)
+  }
+  const confirmRun = async () => {
+    if (!confirmation || confirmation.sessionId !== sessionId || !state.current || saving) return
+    setSaving(true)
+    setRunError(null)
+    try {
+      unwrap(await rpc.call(CHANNEL, 'run-options/apply', { sessionId: confirmation.sessionId, model: confirmation.selection.model,
+        ...(confirmation.selection.reasoningEffort === undefined ? {} : { reasoningEffort: confirmation.selection.reasoningEffort }),
+        speedMode: confirmation.speedMode, expectedModel: confirmation.expectedModel, confirmed: true,
+      }))
+      setConfirmation(null)
+      setDraftEffort(null)
+      setQueued(true)
+      close(true)
+    } catch (error) { setRunError(error instanceof Error ? error.message : t('preferenceFailed')) }
+    finally { setSaving(false) }
   }
   const chooseVerbosity = (outputVerbosity: string) => {
     close(true)
@@ -145,7 +181,7 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
     setPane('root')
     requestAnimationFrame(() => menuRef.current?.querySelector<HTMLButtonElement>(`[data-pane="${target}"]`)?.focus())
   }
-  const cell = (target: "model" | "effort" | "speed" | "verbosity", label: ReactNode, value: ReactNode) => <button
+  const cell = (target: 'verbosity', label: ReactNode, value: ReactNode) => <button
     type="button"
     role="menuitem"
     className="codexModelSelectCell"
@@ -163,8 +199,8 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
     submenu = <div className="codexModelSelectPane">
       {state.status === 'loading' ? <div className="codexModelSelectStatus">{t('modelsLoading')}</div> : null}
       {state.error === null ? null : <div className="codexModelSelectError"><span>{fill(t('modelFailed'), { value: state.error })}</span><button className="codexModelSelectRetry" type="button" onClick={load}>{t('modelRetry')}</button></div>}
-      {state.failures.map(failure => <div className="codexModelSelectWarning" key={failure.id}>{fill(t('groupFailed'), { name: failure.name, value: failure.message })}</div>)}
-      <div className="codexModelSelectGroups scrollable">{state.groups.map(group => <section className="codexModelSelectGroup" role="group" aria-labelledby={`${id}-${group.id}`} key={group.id}>
+      {state.failures.filter(failure => failure.id === 'openai-codex').map(failure => <div className="codexModelSelectWarning" key={failure.id}>{fill(t('groupFailed'), { name: failure.name, value: failure.message })}</div>)}
+      <div className="codexModelSelectGroups scrollable">{groups.map(group => <section className="codexModelSelectGroup" role="group" aria-labelledby={`${id}-${group.id}`} key={group.id}>
         <div className="codexModelSelectGroupTitle" id={`${id}-${group.id}`}>{group.name}</div>
         {group.models.map(model => option({
           key: model.id,
@@ -172,26 +208,10 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
           description: model.description,
           selected: state.current?.provider === group.id && state.current.model === model.id,
           disabled: busy,
-          onClick: () => chooseModel({ provider: group.id, model: model.id }),
+          onClick: () => chooseModel(choices.find(choice => choice.model.id === model.id)!.selection),
         }))}
       </section>)}</div>
       {state.status === 'ready' && choices.length === 0 ? <div className="codexModelSelectEmpty">{t('modelsEmpty')}</div> : null}
-    </div>
-  } else if (pane === 'effort') {
-    submenu = <div className="codexModelSelectPane">
-      {effortChoices.length === 0 ? <div className="codexModelSelectEmpty">{t('effortsEmpty')}</div> : effortChoices.map(level => option({
-        key: level.key,
-        label: level.label,
-        description: level.description,
-        selected: effectiveEffort === level.effort,
-        disabled: busy,
-        onClick: () => chooseEffort(level.effort),
-      }))}
-    </div>
-  } else if (pane === 'speed') {
-    submenu = <div className="codexModelSelectPane">
-      {option({ key: SPEED_MODE_STANDARD, label: t('speedStandard'), description: t('speedStandardHint'), selected: !fast, disabled: !speedWritable, onClick: () => chooseSpeed(SPEED_MODE_STANDARD) })}
-      {option({ key: SPEED_MODE_FAST, label: t('speedFast'), description: t(state.current?.model === 'gpt-6-astra' ? 'speedFastAstraHint' : 'speedFastHint'), selected: fast, disabled: !speedWritable, onClick: () => chooseSpeed(SPEED_MODE_FAST) })}
     </div>
   } else if (pane === 'verbosity') {
     submenu = <div className="codexModelSelectPane">
@@ -199,23 +219,40 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
     </div>
   }
 
-  const paneTitle = { model: t('modelLabel'), effort: t('effortLabel'), speed: t('speedTitle'), verbosity: t('verbosityTitle') }[pane as "model" | "effort" | "speed" | "verbosity"]
-  const menu = open ? <div ref={menuRef} className="codexModelSelectMenu" id={`${id}-menu`} role="menu" aria-label={paneTitle ?? t('modelMenuAria')} aria-busy={state.status === 'loading' || busy}>
+  const paneTitle = pane === 'model' ? t('modelLabel') : pane === 'verbosity' ? t('verbosityTitle') : undefined
+  const menu = open ? <div ref={menuRef} className="codexModelSelectMenu" data-runtime={runtime || undefined} id={`${id}-menu`} role={pane === 'root' ? 'dialog' : 'menu'} aria-label={paneTitle ?? t(runtime ? 'runOptions' : 'modelMenuAria')} aria-busy={state.status === 'loading' || busy}>
     {mobile && pane === 'root' ? <div className="codexModelSelectMobileHeader"><span>{t('modelLabel')}</span><button type="button" role="menuitem" aria-label={t('modelClose')} onClick={() => close(true)}><IconCloseOutline16 /></button></div> : null}
     {pane === 'root' ? <>
-      {cell('model', t('modelLabel'), modelLabel)}
-      {reasoning === undefined ? null : cell('effort', t('effortLabel'), effortLabel)}
-      {speedSupported && cell('speed', t('speedTitle'), t(fast ? 'speedFast' : 'speedStandard'))}
-      {verbositySupported && cell('verbosity', t('verbosityTitle'), verbosityLabel)}
+      <div className="codexEffortCard" data-runtime={runtime || undefined}>
+        <div className="codexEffortHead">
+          <button type="button" className="codexEffortFast" role="switch" aria-checked={fast} aria-label={t('speedTitle')} title={t(fast ? 'speedFastHint' : 'speedStandardHint')} disabled={!speedSupported || !speedWritable || busy || (!runtime && running)} onClick={() => chooseSpeed(fast ? 'standard' : 'fast')}><BoltIcon aria-hidden="true" /></button>
+          <button type="button" className="codexEffortTitle" data-pane="model" onClick={() => setPane('model')} aria-label={`${t('modelLabel')}: ${modelLabel}; ${t('effortLabel')}: ${sliderLabel ?? t('providerDefault')}`}>
+            <strong>{sliderLabel ?? t('providerDefault')}</strong><span>{modelLabel}<IconChevronRightOutline14 /></span>
+          </button>
+          <button type="button" className="codexEffortReset" aria-label={t('effortReset')} title={t('effortReset')} disabled={busy || !currentChoice || (!runtime && running)} onClick={() => chooseEffort(reasoning?.defaultEffort)}><ArrowPathIcon aria-hidden="true" /></button>
+        </div>
+        <div className="codexEffortTrack">
+          <input type="range" className="codexEffortRange" min={0} max={Math.max(0, effortChoices.length - 1)} step={1} value={sliderIndex} aria-label={t('effortLabel')} aria-valuetext={sliderLabel ?? t('providerDefault')} disabled={busy || effortChoices.length < 2 || (!runtime && running)}
+            style={{ background: `linear-gradient(to right, var(--codex-effort-accent) ${effortChoices.length > 1 ? sliderIndex / (effortChoices.length - 1) * 100 : 0}%, var(--dsw-alias-state-idle-primary) 0)` }}
+            onChange={event => setDraftEffort(Number(event.currentTarget.value))}
+            onPointerCancel={() => setDraftEffort(null)}
+            onPointerUp={event => chooseEffort(effortChoices[Number(event.currentTarget.value)]?.effort)}
+            onKeyUp={event => { if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) chooseEffort(effortChoices[Number(event.currentTarget.value)]?.effort) }} />
+          <div className="codexEffortDots" aria-hidden="true">{effortChoices.map(level => <i key={level.key} />)}</div>
+        </div>
+        {runtime ? <span className="codexEffortRunHint">{t('runOptions')}</span> : null}
+      </div>
+      {verbositySupported && !runtime && cell('verbosity', t('verbosityTitle'), verbosityLabel)}
+      {state.error || preferenceSnapshot.error ? <div className="codexModelSelectError" role="alert"><span>{state.error ?? t('preferenceFailed')}</span><button className="codexModelSelectRetry" type="button" onClick={load}>{t('modelRetry')}</button></div> : null}
     </> : <>
       <button ref={backRef} className="codexModelSelectBack" type="button" role="menuitem" onClick={backToRoot} aria-label={`${t('modelBack')}: ${paneTitle}`}><IconChevronLeftOutline14 />{paneTitle}</button>
       {submenu}
     </>}
   </div> : null
-  return <div className="codexModelSelect" ref={rootRef} onKeyDown={event => {
-    if (!open) return
+  return <div className="codexModelSelect" data-runtime={runtime || undefined} ref={rootRef} onKeyDown={event => {
+    if (!open || confirmation) return
     if (event.key === 'Tab' && mobile) {
-      const buttons = [...menuRef.current!.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')]
+      const buttons = [...menuRef.current!.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)')]
       const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
       if (event.shiftKey && index <= 0) { event.preventDefault(); buttons.at(-1)?.focus() }
       else if (!event.shiftKey && index === buttons.length - 1) { event.preventDefault(); buttons[0]?.focus() }
@@ -229,12 +266,12 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
       ref={triggerRef}
       type="button"
       className="codexModelSelectTrigger"
-      aria-label={modelLabel}
-      aria-haspopup="menu"
+      aria-label={runtime ? `${t('runOptions')}: ${modelLabel}` : modelLabel}
+      aria-haspopup="dialog"
       aria-expanded={open}
       aria-controls={open ? `${id}-menu` : undefined}
       title={modelLabel}
-      disabled={locked}
+      disabled={runtime ? busy || !speedWritable : locked || running || busy}
       onClick={() => open ? close() : (setPane('root'), setOpen(true), load())}
     >
       {fast && <BoltIcon className="codexModelSelectBolt" aria-hidden="true" />}
@@ -242,7 +279,18 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
       {effortLabel === undefined ? null : <span className="codexModelSelectEffort">{effortLabel}</span>}
       <IconChevronDownOutline14 className="codexModelSelectChevron" />
     </button>
-    {mobile && open ? createPortal(<div className="codexModelSelectMobileLayer" role="dialog" aria-modal="true" aria-label={t('modelMenuAria')}>{menu}</div>, document.body) : menu}
+    {mobile && open ? createPortal(<div className="codexModelSelectMobileLayer" role="dialog" aria-modal="true" aria-label={t(runtime ? 'runOptions' : 'modelMenuAria')}>{menu}</div>, document.body) : menu}
+    {queued ? <span className="codexVoiceAnnouncement" role="status">{t('runQueued')}</span> : null}
+    {confirmation ? <dialog ref={dialogRef} className="codexRunConfirm" aria-labelledby={`${id}-confirm`} aria-describedby={`${id}-confirm-hint`} onCancel={event => { if (saving) event.preventDefault(); else { setConfirmation(null); setDraftEffort(null) } }}>
+      <h3 id={`${id}-confirm`}>{t('runConfirmTitle')}</h3>
+      <p id={`${id}-confirm-hint`}>{t('runConfirmHint')}</p>
+      <dl><dt>{t('modelLabel')}</dt><dd>{choices.find(choice => choice.model.id === confirmation.selection.model)?.model.name ?? confirmation.selection.model}</dd>
+        <dt>{t('effortLabel')}</dt><dd>{confirmation.selection.reasoningEffort === undefined ? t('providerDefault') : effortName(confirmation.selection.reasoningEffort, confirmation.selection.reasoningEffort)}</dd>
+        <dt>{t('speedTitle')}</dt><dd>{t(confirmation.speedMode === 'fast' ? 'speedFast' : 'speedStandard')}</dd></dl>
+      {confirmation.speedMode === 'fast' ? <p>{t('speedFastHint')}</p> : null}
+      {runError ? <p role="alert">{fill(t('runFailed'), { value: runError })}</p> : null}
+      <div className="codexRunConfirmActions"><button type="button" autoFocus disabled={saving} onClick={() => { setConfirmation(null); setDraftEffort(null) }}>{t('cancel')}</button><button type="button" disabled={saving} onClick={() => { void confirmRun() }}>{t(saving ? 'runSaving' : 'runConfirm')}</button></div>
+    </dialog> : null}
   </div>
 }
 

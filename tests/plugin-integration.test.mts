@@ -217,6 +217,26 @@ function fakeContext({ connection = true, webServer = true, prompt = false } = {
   }
 }
 
+test('model control switches are independent, persisted and disable the user-only runtime route', async () => {
+  const host = fakeContext()
+  applyPlugin(host.ctx as unknown as Parameters<typeof applyPlugin>[0])
+  const signal = new AbortController().signal
+  const defaults = (await host.request('preferences/status', {}, signal)).value
+  assert.equal(defaults.codexModelPicker, true)
+  assert.equal(defaults.runtimeOptions, true)
+  assert.equal((await host.request('preferences/update', { codexModelPicker: false }, signal)).ok, true)
+  assert.equal((await host.request('preferences/status', {}, signal)).value.runtimeOptions, true)
+  assert.equal((await host.request('preferences/update', { runtimeOptions: false }, signal)).ok, true)
+  const saved = (await host.request('preferences/status', {}, signal)).value
+  assert.equal(saved.codexModelPicker, false)
+  assert.equal(saved.runtimeOptions, false)
+  assert.equal((await host.request('preferences/update', { runtimeOptions: 'yes' }, signal)).ok, false)
+  const rejected = await host.request('run-options/apply', { sessionId: 'session-a', model: 'gpt-6-luna', expectedModel: 'gpt-6-luna', speedMode: 'standard', confirmed: true }, signal)
+  assert.equal(rejected.ok, false)
+  assert.match(rejected.error.message, /disabled/)
+  assert.equal(host.tools.some(tool => /run.options/u.test(tool.name)), false)
+})
+
 test('session speed writes keep other sessions and reject invalid requests', async () => {
   const host = fakeContext()
   applyPlugin(((host.ctx) as unknown as Parameters<typeof applyPlugin>[0]))
@@ -377,7 +397,7 @@ test('plugin registers one Codex route, subscription image tool, and DSH-trusted
   assert.equal(typeof preferenceStatus.value.subagentRuntimeInstalled, 'boolean')
   assert.deepEqual(preferenceStatus, {
     ok: true,
-    value: { compactionMode: 'dsh', connectionMode: 'sse', subagentBackend: 'dsh', subagentBackendAvailable: false, subagentRuntimeInstalled: preferenceStatus.value.subagentRuntimeInstalled, transcriptionEnabled: false, codexBasePrompt: false, ...IMAGE_FEATURE_DEFAULTS, imageModel: 'gpt-image-2', imageQuality: 'auto', quickQuotaMode: QUICK_QUOTA_MODE_PERCENT, searchProvider: 'codex', speedMode: SPEED_MODE_STANDARD, sessionSpeedModes: {}, outputVerbosity: OUTPUT_VERBOSITY_DEFAULT, contextMode: CONTEXT_MODE_STANDARD, customContextWindow: 272_000, customContextGpt54: 272_000, customContextGpt54Mini: 272_000, customContextGpt55: 272_000, customContextGpt56: 272_000, customContextGpt6Astra: 272_000, contextModels: activeContextModels, verbosityModels, fastModels: preferenceStatus.value.fastModels, catalogStatus: preferenceStatus.value.catalogStatus, customContextModels: {}, searchMode: 'live', searchDomains: [], quotaAlerts: 'important', quotaShortThreshold: 20, quotaLongThreshold: 20, writable: true },
+    value: { compactionMode: 'dsh', connectionMode: 'sse', subagentBackend: 'dsh', subagentBackendAvailable: false, subagentRuntimeInstalled: preferenceStatus.value.subagentRuntimeInstalled, transcriptionEnabled: false, codexBasePrompt: false, codexModelPicker: true, runtimeOptions: true, ...IMAGE_FEATURE_DEFAULTS, imageModel: 'gpt-image-2', imageQuality: 'auto', quickQuotaMode: QUICK_QUOTA_MODE_PERCENT, searchProvider: 'codex', speedMode: SPEED_MODE_STANDARD, sessionSpeedModes: {}, outputVerbosity: OUTPUT_VERBOSITY_DEFAULT, contextMode: CONTEXT_MODE_STANDARD, customContextWindow: 272_000, customContextGpt54: 272_000, customContextGpt54Mini: 272_000, customContextGpt55: 272_000, customContextGpt56: 272_000, customContextGpt6Astra: 272_000, contextModels: activeContextModels, verbosityModels, fastModels: preferenceStatus.value.fastModels, catalogStatus: preferenceStatus.value.catalogStatus, customContextModels: {}, searchMode: 'live', searchDomains: [], quotaAlerts: 'important', quotaShortThreshold: 20, quotaLongThreshold: 20, writable: true },
   })
   const preferenceUpdate = await host.request('preferences/update', {
     quickQuotaMode: QUICK_QUOTA_MODE_BAR,
@@ -389,7 +409,7 @@ test('plugin registers one Codex route, subscription image tool, and DSH-trusted
   }, signal)
   assert.deepEqual(preferenceUpdate, {
     ok: true,
-    value: { compactionMode: 'dsh', connectionMode: 'sse', subagentBackend: 'dsh', subagentBackendAvailable: false, subagentRuntimeInstalled: preferenceStatus.value.subagentRuntimeInstalled, transcriptionEnabled: false, codexBasePrompt: false, ...IMAGE_FEATURE_DEFAULTS, imageModel: 'gpt-image-2', imageQuality: 'auto', quickQuotaMode: QUICK_QUOTA_MODE_BAR, searchProvider: 'dsh', speedMode: SPEED_MODE_FAST, sessionSpeedModes: {}, outputVerbosity: OUTPUT_VERBOSITY_DEFAULT, contextMode: CONTEXT_MODE_EXTENDED, customContextWindow: 500_000, customContextGpt54: 272_000, customContextGpt54Mini: 400_000, customContextGpt55: 272_000, customContextGpt56: 272_000, customContextGpt6Astra: 272_000, contextModels: activeContextModels, verbosityModels, fastModels: preferenceStatus.value.fastModels, catalogStatus: preferenceStatus.value.catalogStatus, customContextModels: {}, searchMode: 'live', searchDomains: [], quotaAlerts: 'important', quotaShortThreshold: 20, quotaLongThreshold: 20, writable: true },
+    value: { compactionMode: 'dsh', connectionMode: 'sse', subagentBackend: 'dsh', subagentBackendAvailable: false, subagentRuntimeInstalled: preferenceStatus.value.subagentRuntimeInstalled, transcriptionEnabled: false, codexBasePrompt: false, codexModelPicker: true, runtimeOptions: true, ...IMAGE_FEATURE_DEFAULTS, imageModel: 'gpt-image-2', imageQuality: 'auto', quickQuotaMode: QUICK_QUOTA_MODE_BAR, searchProvider: 'dsh', speedMode: SPEED_MODE_FAST, sessionSpeedModes: {}, outputVerbosity: OUTPUT_VERBOSITY_DEFAULT, contextMode: CONTEXT_MODE_EXTENDED, customContextWindow: 500_000, customContextGpt54: 272_000, customContextGpt54Mini: 400_000, customContextGpt55: 272_000, customContextGpt56: 272_000, customContextGpt6Astra: 272_000, contextModels: activeContextModels, verbosityModels, fastModels: preferenceStatus.value.fastModels, catalogStatus: preferenceStatus.value.catalogStatus, customContextModels: {}, searchMode: 'live', searchDomains: [], quotaAlerts: 'important', quotaShortThreshold: 20, quotaLongThreshold: 20, writable: true },
   })
   assert.deepEqual(host.webUpdates.at(-1), {
     config: { searchProvider: 'deepseek-official', fetchProvider: 'local' },

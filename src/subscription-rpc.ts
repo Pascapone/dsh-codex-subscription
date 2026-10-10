@@ -22,7 +22,7 @@ interface RpcHandlerOptions {
   transcriptionEnabled?: () => boolean;
   transcribeAudio: ReturnType<typeof createCodexTranscriptionProvider>;
 }
-import { PREFERENCE_FIELDS } from './preference-fields.js'
+import { MODEL_CONTROL_DEFAULTS, PREFERENCE_FIELDS } from './preference-fields.js'
 import { decodeTranscriptionAudio } from './codex-transcription.js'
 import { capabilityPatch } from './capability-settings.js'
 import { ORIGINAL_IMAGE_CHUNK_BYTES, ORIGINAL_IMAGE_ID_PATTERN } from './image-original-contract.js'
@@ -123,6 +123,11 @@ export function createSubscriptionRpcHandler({ authHandler, usageReader, resetCr
             return { ok: true, value: preferences.status() }
           }
           const patch = capabilityPatch(payload) as Record<string, unknown>
+          for (const field of Object.keys(MODEL_CONTROL_DEFAULTS)) {
+            if (!Object.hasOwn(payload ?? {}, field)) continue
+            if (typeof payload![field] !== 'boolean') return publicError('invalid-input', 'Invalid model control preference')
+            patch[field] = payload![field]
+          }
           if (Object.hasOwn(payload ?? {}, 'codexBasePrompt')) {
             if (typeof payload!.codexBasePrompt !== 'boolean') return publicError('invalid-input', 'Invalid Codex base prompt preference')
             patch.codexBasePrompt = payload!.codexBasePrompt

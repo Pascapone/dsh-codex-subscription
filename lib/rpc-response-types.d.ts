@@ -77,6 +77,15 @@ export type RpcResponseMap = {
     'transcription/transcribe': {
         text: string;
     };
+    'run-options/apply': {
+        selected: {
+            provider: string;
+            model: string;
+            reasoningEffort?: string;
+        };
+        speedMode: 'standard' | 'fast';
+        queued: true;
+    };
     'sketch/connect': {
         token: string;
     };

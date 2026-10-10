@@ -5,6 +5,8 @@ export declare function createPreferenceController(scope: PreferenceScope, rpc: 
         connectionMode: string;
         compactionMode: string;
         codexBasePrompt: boolean;
+        codexModelPicker: boolean;
+        runtimeOptions: boolean;
         subagentBackend: string;
         subagentBackendAvailable: boolean;
         subagentRuntimeInstalled: boolean;
