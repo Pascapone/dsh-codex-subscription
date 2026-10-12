@@ -380,7 +380,7 @@ test('plugin registers one Codex route, subscription image tool, and DSH-trusted
   const preferenceStatus = await host.request('preferences/status', {}, signal)
   const activeContextModels = preferenceStatus.value.contextModels
   assert.deepEqual(activeContextModels, [
-    { key: 'gpt-6.1-sol', label: 'GPT-6.1-Sol', maximum: 872_000, default: 272_000 },
+    { key: 'gpt-6.1-sol', label: 'GPT-6.1-Sol', maximum: 872_000, default: 500_000 },
     { key: 'gpt-5.5', label: 'GPT-5.5', maximum: 1_000_000 },
     { key: 'gpt-5.6', label: 'GPT-5.6 Luna / Sol / Terra', maximum: 1_000_000 },
     { key: 'gpt-6-astra', label: 'GPT-6 Astra', maximum: 872_000 },
@@ -455,10 +455,25 @@ test('Codex base prompt opt-in appends only the selected model and preserves DSH
   assert.equal(await assemble(original), original)
 })
 
-test('Astra custom context is persisted through settings RPC with its audited bounds', async () => {
+test('model context limits persist through settings RPC with defaults, overrides and audited bounds', async () => {
   const host = fakeContext()
   applyPlugin(((host.ctx) as unknown as Parameters<typeof applyPlugin>[0]))
   const rpc = (method: string, payload: Record<string, unknown> = {}) => host.request(method, payload, new AbortController().signal)
+  const window = async () => (await host.registered[0].adapter.resolveModel('openai-codex', 'gpt-6.1-sol'))!.context!.contextWindow
+  assert.equal(await window(), 500_000)
+  const overrides = { 'gpt-6.1-sol': 350_000, 'gpt-6-astra': 400_000 }
+  const saved = await rpc('preferences/update', { contextMode: 'custom', customContextModels: overrides })
+  assert.equal(saved.ok, true)
+  assert.deepEqual(saved.value.customContextModels, overrides)
+  assert.equal(await window(), 350_000)
+  await rpc('preferences/update', { contextMode: 'standard' })
+  assert.equal(await window(), 500_000)
+  await rpc('preferences/update', { contextMode: 'custom' })
+  assert.equal(await window(), 350_000, 'switching modes keeps saved per-model overrides')
+  assert.equal((await rpc('preferences/update', { customContextModels: { 'gpt-6.1-sol': '500000' } })).ok, false)
+  assert.equal(await window(), 350_000, 'invalid input must not replace a saved budget')
+  await rpc('preferences/update', { customContextModels: {} })
+  assert.equal(await window(), 500_000, 'an unset custom limit uses the new default')
   assert.equal((await rpc('preferences/status')).value.customContextGpt6Astra, 272_000)
   for (const value of [128_000, 500_000, 872_000]) {
     const result = await rpc('preferences/update', { contextMode: 'custom', customContextGpt6Astra: value })

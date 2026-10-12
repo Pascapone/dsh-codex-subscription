@@ -184,6 +184,8 @@ test('settings offer ready-to-use context presets and keep custom limits out of 
   assert.doesNotMatch(source, /<select[^>]*codexSubscriptionContext/u)
   assert.match(source, /contextStandardHint/u)
   assert.match(source, /contextExtendedHint/u)
+  assert.match(source, /onClick=\{\(\) => \{ void preference\.set\(\{ \[CONTEXT_MODE_FIELD\]: CONTEXT_MODE_CUSTOM \}\) \}\}>\{t\('contextConfigure'\)\}/u)
+  assert.match(source, /GPT-6\.1 Sol defaults to 500K tokens/u)
   assert.match(source, /customContextWindow/u)
   assert.match(source, /type=['"]number['"]/u)
   assert.match(source, /inputMode=['"]numeric['"]/u)

@@ -24,7 +24,7 @@ test('offline catalog adds GPT-6 fallbacks without resurrecting retired Spark', 
   assert.deepEqual(catalog.getModels(native).find(model => model.id === 'gpt-6-luna'), native.find(model => model.id === 'gpt-6-luna'))
   assert.deepEqual(models.slice(0, 3).map(model => model.id), ['gpt-6-luna', 'gpt-6-sol', 'gpt-6.1-sol'])
   assert.equal(models.some(model => model.id === 'gpt-5.3-codex-spark'), false)
-  assert.equal(models[2].contextWindow, 272_000)
+  assert.equal(models[2].contextWindow, 500_000)
   assert.equal(models[2].maxContextWindow, 872_000)
   assert.equal(supportsCodexFastMode('gpt-6.1-sol'), true)
   assert.equal(models.some(model => model.id === 'gpt-5.5'), true)
@@ -34,6 +34,10 @@ test('offline catalog adds GPT-6 fallbacks without resurrecting retired Spark', 
   assert.equal(models[0].contextWindow, 272_000)
   assert.equal(models[0].maxContextWindow, 872_000)
   assert.equal(models[0].compat!.supportsAdditionalTools, true)
+  const existingSol = { ...models[2], contextWindow: 272_000 }
+  assert.equal(catalog.getModels([existingSol]).find(model => model.id === 'gpt-6.1-sol')!.contextWindow, 500_000)
+  assert.equal(existingSol.contextWindow, 272_000, 'do not mutate pi-ai models')
+  assert.equal(catalog.getModels([{ ...existingSol, maxContextWindow: 400_000 }]).find(model => model.id === 'gpt-6.1-sol')!.contextWindow, 400_000, 'respect an explicit lower account limit')
 })
 
 const remote = (overrides = {}) => ({
@@ -218,8 +222,18 @@ test('new Codex models appear from the account catalog with supported reasoning 
   }) as unknown as NonNullable<Parameters<typeof createOfficialModelCatalog>[0]>))
   await catalog.refresh()
   let contextMode = 'standard'
-  const provider = openaiCodexSubscriptionProvider((({ catalog, resolveContextMode: () => contextMode }) as unknown as NonNullable<Parameters<typeof openaiCodexSubscriptionProvider>[0]>))
-  assert.equal(provider.getModels().find(model => model.id === 'gpt-6.1-sol')!.contextWindow, 272_000)
+  const customWindows: Record<string, number> = {}
+  const provider = openaiCodexSubscriptionProvider((({ catalog, resolveContextMode: () => contextMode, resolveCustomContextWindow: (key?: string) => key === undefined ? undefined : customWindows[key] }) as unknown as NonNullable<Parameters<typeof openaiCodexSubscriptionProvider>[0]>))
+  const contexts = () => provider.getModels().map(model => [model.id, model.contextWindow])
+  assert.deepEqual(contexts(), [['gpt-6-luna', 272_000], ['gpt-6-sol', 272_000], ['gpt-6.1-sol', 500_000]])
+  assert.equal(contextModelGroups(catalog.getModels([])).find(model => model.key === 'gpt-6.1-sol')!.default, 500_000, 'UI and provider use the same default even with a stale online catalog')
+  contextMode = 'custom'
+  assert.deepEqual(contexts(), [['gpt-6-luna', 272_000], ['gpt-6-sol', 272_000], ['gpt-6.1-sol', 500_000]])
+  Object.assign(customWindows, { 'gpt-6-luna': 200_000, 'gpt-6-sol': 400_000, 'gpt-6.1-sol': 300_000 })
+  await catalog.refresh()
+  assert.deepEqual(contexts(), [['gpt-6-luna', 200_000], ['gpt-6-sol', 400_000], ['gpt-6.1-sol', 300_000]])
+  contextMode = 'standard'
+  assert.deepEqual(contexts(), [['gpt-6-luna', 272_000], ['gpt-6-sol', 272_000], ['gpt-6.1-sol', 500_000]])
   contextMode = 'extended'
   assert.deepEqual(provider.getModels().map(model => [model.id, model.contextWindow]), [
     ['gpt-6-luna', 872_000], ['gpt-6-sol', 872_000], ['gpt-6.1-sol', 872_000],

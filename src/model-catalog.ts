@@ -7,6 +7,9 @@ export const CODEX_MODELS_URL = `https://chatgpt.com/backend-api/codex/models?cl
 
 const LEVELS: ModelThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
 const DEFAULT_REFRESH_TIMEOUT_MS = 10_000
+// Codex's announced default; account catalogs and installed pi-ai may lag behind.
+// https://x.com/thsottiaux/status/2109430343346581527
+const SOL61_DEFAULT_CONTEXT_WINDOW = 500_000
 const BUNDLED_FALLBACK_MODELS: readonly Readonly<RemoteModel>[] = Object.freeze([
   Object.freeze({
     id: 'gpt-6-luna',
@@ -44,7 +47,7 @@ const BUNDLED_FALLBACK_MODELS: readonly Readonly<RemoteModel>[] = Object.freeze(
     description: 'Latest workhorse model for coding and everyday work.',
     priority: 1,
     input: ['text', 'image'] as Model<Api>['input'],
-    contextWindow: 272_000,
+    contextWindow: SOL61_DEFAULT_CONTEXT_WINDOW,
     maxContextWindow: 872_000,
     reasoning: true,
     thinkingLevelMap: { off: null, minimal: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
@@ -256,8 +259,10 @@ export function createOfficialModelCatalog(options: ModelCatalogOptions = {}) {
   return Object.freeze({
     refresh,
     // Keep current recommended models usable when the account catalog cannot be
-    // refreshed. A successful official catalog remains authoritative.
-    getModels: (fallback: readonly CodexModel[]): CodexModel[] => models ?? addBundledCodexFallbacks(fallback),
+    // refreshed. Account capabilities stay authoritative; apply the announced Sol default.
+    getModels: (fallback: readonly CodexModel[]): CodexModel[] => (models ?? addBundledCodexFallbacks(fallback)).map(model => model.id === 'gpt-6.1-sol'
+      ? { ...model, contextWindow: Math.min(SOL61_DEFAULT_CONTEXT_WINDOW, model.maxContextWindow ?? SOL61_DEFAULT_CONTEXT_WINDOW) }
+      : model),
     metadata: (modelId: string | undefined) => metadata.get(modelId!),
     // Remote model capabilities may change; reviewed DSH instructions must not.
     basePrompt: (modelId: string) => Object.hasOwn(DSH_MODEL_PROMPTS, modelId) ? (DSH_MODEL_PROMPTS as Readonly<Record<string, string>>)[modelId] : undefined,

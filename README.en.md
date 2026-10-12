@@ -122,7 +122,11 @@ When the account’s official catalog advertises `gpt-reserve`, it appears at th
 
 ### GPT-6 Sol / Luna
 
-GPT-6.1 Sol, GPT-6 Sol and GPT-6 Luna are listed in [Codex's model catalog](https://github.com/openai/codex/blob/1983c48fd1/codex-rs/models-manager/models.json). The plugin reads available models and reasoning levels from the current account's Codex catalog. It also bundles 6.1 Sol, Sol and Luna as offline fallbacks for hosts whose installed pi-ai catalog predates these models; a successfully refreshed account catalog remains authoritative. The 6.1 Sol fallback follows Codex's 272000-token standard window and 872000-token extended limit, with Fast support. Selecting a fallback does not grant server-side model access.
+GPT-6.1 Sol, GPT-6 Sol and GPT-6 Luna are listed in [Codex's model catalog](https://github.com/openai/codex/blob/1983c48fd1/codex-rs/models-manager/models.json). The plugin reads available models and reasoning levels from the current account's Codex catalog. It also bundles 6.1 Sol, Sol and Luna as offline fallbacks for hosts whose installed pi-ai catalog predates these models; a successfully refreshed account catalog remains authoritative for availability and capabilities. GPT-6.1 Sol defaults to 500000 tokens following [OpenAI's announcement](https://x.com/thsottiaux/status/2109430343346581527), including when the installed or account catalog still reports 272000. An explicit lower account maximum is respected; the existing offline extended limit remains 872000, with Fast support. Other models keep their current defaults. Selecting a fallback does not grant server-side model access.
+
+### Per-model context limits
+
+Open **Settings → Codex → Advanced → Context window → Configure token limits per model** to switch to Custom and edit full token counts. Existing values seed the inputs, except GPT-6.1 Sol starts at 500000. Values save on blur or Enter and persist across mode changes and catalog refreshes; existing custom values are not replaced by an upgrade. Standard restores model defaults; Extended uses each model's maximum. These are local DSH context budgets, not server-side capacity upgrades, and custom values remain bounded by the model maximum.
 
 ### Optional DSH model guidance
 

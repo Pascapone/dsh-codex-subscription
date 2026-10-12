@@ -123,7 +123,11 @@ dsh --profile headless "只回复：ok"
 
 ### GPT-6 Sol / Luna
 
-GPT-6.1 Sol、GPT-6 Sol 和 GPT-6 Luna 已在 [Codex 模型目录](https://github.com/openai/codex/blob/1983c48fd1/codex-rs/models-manager/models.json)中列出。插件会从当前账号的 Codex 模型目录自动读取可用模型及推理档位；对于 pi-ai 内置目录尚未包含这些模型的宿主，还会提供 6.1 Sol、Sol 和 Luna 的离线回退项。账号目录刷新成功后仍以服务端目录为准。6.1 Sol 的离线回退采用 272000 Token 标准窗口、872000 Token 扩展上限并支持高速模式；显示回退项不代表服务端已向账号开放该模型。
+GPT-6.1 Sol、GPT-6 Sol 和 GPT-6 Luna 已在 [Codex 模型目录](https://github.com/openai/codex/blob/1983c48fd1/codex-rs/models-manager/models.json)中列出。插件会从当前账号的 Codex 模型目录自动读取可用模型及推理档位；对于 pi-ai 内置目录尚未包含这些模型的宿主，还会提供 6.1 Sol、Sol 和 Luna 的离线回退项。账号目录刷新成功后，模型可用性与能力仍以服务端目录为准。根据 [OpenAI 公告](https://x.com/thsottiaux/status/2109430343346581527)，GPT-6.1 Sol 默认使用 500000 Token，即使本机或账号目录仍返回 272000；服务端明确给出更低最大值时仍遵守该上限。既有离线扩展上限保持 872000，并支持高速模式。其他模型保留当前默认值；显示回退项不代表服务端已向账号开放该模型。
+
+### 按模型配置上下文
+
+打开 **设置 → Codex 订阅 → 高级与诊断 → 上下文窗口 → 按模型配置 Token 上限**，切换到自定义并填写完整 Token 数值。输入框沿用已有默认值，仅 GPT-6.1 Sol 初始值改为 500000。离开输入框或按 Enter 后保存；切换模式、刷新目录和升级不会替换已保存的自定义值。标准模式恢复模型默认值，扩展模式使用各模型最大值。这些仅是 DSH 本地上下文预算，不提升服务端容量；自定义值仍受模型上限约束。
 
 ### 可选 DSH 模型指导
 

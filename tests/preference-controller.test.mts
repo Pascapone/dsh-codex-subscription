@@ -44,6 +44,21 @@ function harness({ fail = false, rpcCall }: {fail?: boolean; rpcCall?: FixtureRp
 
 const fallbackModels = [{ key: 'gpt-5.5', label: 'GPT-5.5', maximum: 1_000_000 }]
 
+test('per-model inputs start at current defaults and preserve saved overrides', async () => {
+  const models = [...fallbackModels, { key: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', maximum: 872_000, default: 500_000 }]
+  const { controller, settle } = harness({ rpcCall: async () => ({ ok: true, value: { contextModels: models } }) })
+  await controller.load()
+  assert.equal(controller.getSnapshot().customContextWindows['gpt-5.5'], 272_000)
+  assert.equal(controller.getSnapshot().customContextWindows['gpt-6.1-sol'], 500_000)
+  const write = controller.set({ customContextModels: { 'gpt-6.1-sol': 350_000, 'gpt-5.5': 400_000 } })
+  settle()
+  await write
+  await controller.refreshModels()
+  assert.equal(controller.getSnapshot().customContextWindows['gpt-6.1-sol'], 350_000)
+  assert.equal(controller.getSnapshot().customContextWindows['gpt-5.5'], 400_000)
+  controller.dispose()
+})
+
 test('missing Codex runtime leaves ordinary preferences and the DSH backend usable', async () => {
   let installed = false
   const { controller } = harness({ rpcCall: async () => ({ ok: true, value: {
