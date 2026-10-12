@@ -3,12 +3,20 @@ type ImageEvent = Parameters<ConversationNodeDefinition<undefined>['match']>[0];
 type AssistantStepValue = { finalNode?: { seq?: number } };
 type AssistantStepLocation = Omit<StepLocation, 'data'> & { data: ConversationLocationDataStore<{ 'assistant-step': AssistantStepValue }> };
 // Historical tool-result wrappers remain part of the supported SDK cohorts.
-type LegacyImageResultBlock = { type?: unknown; isError?: unknown; content?: readonly { type?: unknown; attachment?: unknown }[] };
+type LegacyImageResultBlock = { type?: unknown; toolCallId?: string; attachment?: unknown; isError?: unknown; content?: readonly { type?: unknown; attachment?: unknown }[] };
 type ImageResultBlock = LegacyImageResultBlock & { kind: 'tool-result'; meta: Extract<ImageEvent, { type: 'tool/result' }>['data']['meta'] };
 const KIND = 'codex-image-output'
-const resultsOf = (event: ImageEvent | null | undefined) => event?.type === 'tool/result' && (event.data.meta as { kind?: unknown } | null | undefined)?.kind === 'codex-subscription-image'
-  ? ((event.data.message?.content ?? []) as readonly LegacyImageResultBlock[]).filter(block => block.type === 'tool-result' && !block.isError
-    && block.content?.some(part => part.type === 'image' && part.attachment)) : []
+// Current hosts deliver rendered blocks directly; retain legacy wrappers too.
+const resultsOf = (event: ImageEvent | null | undefined): LegacyImageResultBlock[] => {
+  if (event?.type !== 'tool/result' || (event.data.meta as { kind?: unknown } | null | undefined)?.kind !== 'codex-subscription-image') return []
+  const content = (event.data.message?.content ?? []) as readonly LegacyImageResultBlock[]
+  const wrapped = content.filter(block => block.type === 'tool-result' && !block.isError
+    && block.content?.some(part => part.type === 'image' && part.attachment))
+  if (wrapped.length > 0) return wrapped
+  return content.some(part => part.type === 'image' && part.attachment)
+    ? [{ type: 'tool-result', toolCallId: `${event.data.turn}:${event.data.step ?? event.seq}`, isError: false, content }]
+    : []
+}
 
 // Presentation only: project existing durable results, without inserting another
 // message into the model's context or expanding unrelated tool calls.
@@ -31,9 +39,9 @@ export const imageConversationNode = {
     const answer = (turn?.steps as readonly AssistantStepLocation[] | undefined)?.at(-1)?.data.get('assistant-step')
     const lastResultSeq = Math.max(...context.matches.filter(match => resultsOf(match.event).length).map(match => match.event.seq))
     const answerSeq = answer?.finalNode?.seq
-    // Between the final answer and its action row, outside the process fold.
+    // Session scope keeps this display node outside collapsed Turn/Step groups.
     const anchorSeq = answerSeq! > lastResultSeq ? answerSeq! + 0.025 : end.event.seq - 0.025
     return { key: context.key, id: context.id, kind: KIND, target: 'chat',
-      location: end.location, anchorSeq, visibility: 'visible', data: { blocks } }
+      location: { kind: 'session' }, anchorSeq, visibility: 'visible', data: { blocks } }
   },
 } satisfies ConversationNodeDefinition<undefined>
