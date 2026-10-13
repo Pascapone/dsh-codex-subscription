@@ -34,6 +34,7 @@ function fixture() {
     get: (name: keyof typeof services) => services[name],
     sessionProjections: services.sessionProjections,
     effect: owner.effect,
+    on: (name: string, hook: unknown) => { hooks.set(name, hook); return () => { hooks.delete(name); }; },
     llm: {
       listModels: async () => ['gpt-6-luna', 'gpt-6.1-sol', 'gpt-5.3-codex-spark'].map(id => ({ id, reasoning: { efforts: [{ id: 'low' }, { id: 'high' }] } })),
       resolveCallConfig: async (config: Selection) => {
@@ -44,7 +45,7 @@ function fixture() {
   };
   const run = createRunOptions(ctx as unknown as Parameters<typeof createRunOptions>[0], {
     get: () => values,
-    async setSessionSpeed(id, speed) { if (rejectSave) { rejectSave = false; throw new Error('storage failed'); } values.sessionSpeedModes[id] = speed; const pause = pauseSave; pauseSave = undefined; await pause?.(); },
+    async setSessionSpeed(id, speed) { if (rejectSave) { rejectSave = false; throw new Error('storage failed'); } if (speed === undefined) delete values.sessionSpeedModes[id]; else values.sessionSpeedModes[id] = speed; const pause = pauseSave; pauseSave = undefined; await pause?.(); },
   }, model => model !== 'gpt-5.3-codex-spark');
   const assemble = async (next = async (): Promise<Assembly> => ({ sections: [], contexts: [], tools: [], variables: { provider: header.provider, model: header.model } })) => {
     const hook = hooks.get('system-prompt/assemble') as (_input: unknown, _context: unknown, next: () => Promise<Assembly>) => Promise<Assembly>;
@@ -171,4 +172,23 @@ test('disabled, unconfirmed, stale, unsupported and idle requests are rejected w
   assert.equal(f.events.length, 0);
   assert.equal(f.values.sessionSpeedModes['session-a'], 'standard');
   f.cleanup();
+});
+
+test('fresh child speed is ready for its first request and failed-start preferences can be removed', async () => {
+  const f = fixture();
+  const prepare = f.hooks.get('codex-subscription/prepare-child-speed') as (id: string, model: string, speed: 'standard' | 'fast') => Promise<() => Promise<void>>;
+  await prepare('standard-child', selection.model, 'standard');
+  const rollback = await prepare('fast-child', selection.model, 'fast');
+  assert.equal(f.run.speedFor('standard-child'), 'standard');
+  assert.equal(f.run.speedFor('fast-child'), 'fast');
+  assert.equal(f.run.speedFor('session-a'), 'standard');
+  await assert.rejects(prepare('unsupported-child', 'gpt-5.3-codex-spark', 'fast'), /not supported/);
+  assert.equal(Object.hasOwn(f.values.sessionSpeedModes, 'unsupported-child'), false);
+  await rollback();
+  assert.equal(Object.hasOwn(f.values.sessionSpeedModes, 'fast-child'), false);
+  f.failNextSave();
+  await assert.rejects(prepare('failed-child', selection.model, 'fast'), /storage failed/);
+  assert.equal(Object.hasOwn(f.values.sessionSpeedModes, 'failed-child'), false);
+  f.cleanup();
+  assert.equal(f.hooks.size, 0);
 });

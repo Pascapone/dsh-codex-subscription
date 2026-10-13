@@ -28,12 +28,19 @@ export function createSettingsAdapter<S, T>(ctx: AdapterContext, schema: Schemas
     get: () => settings.get(),
     update: (patch: Record<string, unknown>) => settings.update(patch),
     watch: (listener: (value: SettingsValue) => void) => settings.watch(listener),
+    // Undefined removes provisioning state after a failed child start.
     setSessionSpeed(sessionId: string, speedMode: unknown) {
       if (id && typeof ctx.settings.mutate === 'function') {
-        return ctx.settings.mutate(id, [{ op: 'set', path: ['sessionSpeedModes', sessionId], value: speedMode }])
+        return ctx.settings.mutate(id, [speedMode === undefined
+          ? { op: 'unset', path: ['sessionSpeedModes', sessionId] }
+          : { op: 'set', path: ['sessionSpeedModes', sessionId], value: speedMode }])
       }
       // ponytail: older settings hosts lack path mutation; serialize whole-map writes until they are retired.
-      const write = pending.then(() => settings.update({ sessionSpeedModes: { ...settings.get().sessionSpeedModes, [sessionId]: speedMode } }))
+      const write = pending.then(() => {
+        const sessionSpeedModes = { ...settings.get().sessionSpeedModes };
+        if (speedMode === undefined) delete sessionSpeedModes[sessionId]; else sessionSpeedModes[sessionId] = speedMode;
+        return settings.update({ sessionSpeedModes });
+      })
       pending = write.catch(() => {})
       return write
     },

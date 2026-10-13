@@ -8,10 +8,17 @@ import type { SpeedMode } from './settings-types.js';
 type Agent = Extract<Awaited<ReturnType<Context['sessionController']['resolveAgent']>>, { agent: unknown }>['agent'];
 type Selection = Pick<LlmCallConfig, 'provider' | 'model' | 'reasoningEffort'>;
 
-// User-only operation: the authenticated UI supplies the confirmation; no agent tool exposes it.
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /** Persist child speed before startup; return rollback for failed startup. @mode bail */
+    'codex-subscription/prepare-child-speed'(childId: SessionId, model: string, speedMode: 'standard' | 'fast'): Promise<() => Promise<void>> | undefined;
+  }
+}
+
+// Live changes require UI confirmation; fresh delegation only prepares its new child's speed.
 export function createRunOptions(ctx: Context, settings: {
   get(): Record<string, unknown> & { sessionSpeedModes?: Readonly<Record<string, unknown>> };
-  setSessionSpeed(sessionId: string, speedMode: SpeedMode): Promise<unknown>;
+  setSessionSpeed(sessionId: string, speedMode: SpeedMode | undefined): Promise<unknown>;
 }, supportsFast: (model: string) => boolean) {
   const disposers = new Map<Agent, () => void>();
   const requestSpeeds = new Map<string, SpeedMode>();
@@ -65,6 +72,11 @@ export function createRunOptions(ctx: Context, settings: {
     disposers.set(agent, dispose);
   };
   ctx.effect(() => () => { for (const dispose of [...disposers.values()]) dispose(); });
+  ctx.effect(() => ctx.on('codex-subscription/prepare-child-speed', async (childId, model, speedMode) => {
+    if (speedMode === 'fast' && !supportsFast(model)) throw new Error('Fast is not supported by this Codex model');
+    await settings.setSessionSpeed(childId, speedMode);
+    return async () => { await settings.setSessionSpeed(childId, undefined); };
+  }));
 
   return {
     selectionFor: (sessionId: string | undefined) => sessionId === undefined ? undefined : requestSelections.get(sessionId),

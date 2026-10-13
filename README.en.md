@@ -50,6 +50,8 @@ See below for detailed installation steps, terminal commands, updates, and remov
 
 These capabilities reuse the same local ChatGPT sign-in. Subscription routing failures stay visible and never silently switch to another paid route.
 
+Fresh DSH Multi-Agent delegations support `speed_mode: "standard" | "fast"` (Standard by default). Speed is saved for the child before its first request, does not change the parent's speed, and survives resume. Unsupported Fast models are rejected; failed child starts remove the prepared preference. Both updated plugins are required for Fast delegation.
+
 ## Product screen
 
 <p align="center">
