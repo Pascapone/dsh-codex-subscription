@@ -39,10 +39,12 @@ function Initialize-Runner {
     & node (Join-Path $compiledScripts 'pin-official-cohort.mjs') $runnerRoot $DshVersion
     if ($LASTEXITCODE -ne 0) { throw 'Official DSH cohort pinning failed.' }
     # The isolated CI checkout intentionally has no development node_modules.
-    # Materialize the one test-only browser storage emulator beside the runner.
+    # Materialize the test-only browser storage emulator and PSD codec beside the runner.
     $sourceManifest = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../package.json') -Raw | ConvertFrom-Json
     $indexedDbVersion = $sourceManifest.devDependencies.'fake-indexeddb'
     if (-not $indexedDbVersion) { throw 'Missing IndexedDB test dependency version.' }
+    $psdVersion = $sourceManifest.devDependencies.'ag-psd'
+    if (-not $psdVersion) { throw 'Missing PSD test dependency version.' }
     & $runner.Source `
         --dir $runnerRoot `
         --config.minimum-release-age=0 `
@@ -55,7 +57,8 @@ function Initialize-Runner {
         '--allow-build=node-pty' `
         '--allow-build=protobufjs' `
         "@deepseek-ai/dsh@$DshVersion" `
-        "fake-indexeddb@$indexedDbVersion"
+        "fake-indexeddb@$indexedDbVersion" `
+        "ag-psd@$psdVersion"
     if ($LASTEXITCODE -ne 0) { throw 'Official DSH runner materialization failed.' }
 
     $installedManifest = Get-Content -LiteralPath `

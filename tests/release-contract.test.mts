@@ -452,3 +452,10 @@ test('the README install step names the exact released version, so a new release
     }
   }
 })
+
+
+test('isolated official acceptance installs the PSD codec used by lifecycle tests', () => {
+  const script = text('.github/scripts/accept-official-release.ps1')
+  assert.match(script, /\$psdVersion = \$sourceManifest\.devDependencies\.'ag-psd'/u)
+  assert.ok(script.includes('"ag-psd@$psdVersion"'))
+})
