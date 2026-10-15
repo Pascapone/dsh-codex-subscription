@@ -38,8 +38,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          published="$(npm view @pascapone/dsh-codex-subscription dist-tags.latest)"
-          node --experimental-strip-types scripts/ci-change-plan.mts --base "$BASE_SHA" --published "$published"
+          if [[ "$GITHUB_REPOSITORY" == "Pascapone/dsh-codex-subscription" ]]; then
+            # This fork distributes exact GitHub commits; no npm release exists.
+            node --experimental-strip-types scripts/ci-change-plan.mts --base "$BASE_SHA"
+          else
+            package_name="$(node -p "require('./package.json').name")"
+            published="$(npm view "$package_name" dist-tags.latest)"
+            node --experimental-strip-types scripts/ci-change-plan.mts --base "$BASE_SHA" --published "$published"
+          fi
 
   behavior:
     name: Runtime behavior and candidate package

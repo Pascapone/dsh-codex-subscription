@@ -68,3 +68,14 @@ test('a versioned runtime change runs behavior and installed-product acceptance'
   assert.equal(output.plan.official, true)
   assert.equal(output.plan.runtime, true)
 })
+
+
+test('GitHub-only fork classifies runtime changes without an npm publication', () => {
+  const result = spawnSync(process.execPath, [script, '--base', 'HEAD', '--files', 'src/index.ts', '--package-version', '2.5.9'], { encoding: 'utf8' })
+  assert.equal(result.status, 0, result.stderr)
+  const output = JSON.parse(result.stdout)
+  assert.equal(output.plan.runtime, true)
+  assert.equal(output.plan.behavior, true)
+  assert.equal(output.plan.delivery, true)
+  assert.equal(output.publishedVersion, undefined)
+})
