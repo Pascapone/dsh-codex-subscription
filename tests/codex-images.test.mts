@@ -1,9 +1,10 @@
+
 import type { ContentBlock } from '@deepseek-ai/dsh-llm';
 type ImageOptions = Parameters<typeof createCodexImageTool>[0];
 type SaveInput = Parameters<ImageOptions['attachments']['saveImage']>[0];
 type FixtureRef = typeof IMAGE_REF;
 type CapturedInit = RequestInit & {headers: Record<string, string>; body: string};
-type FixtureTool = Omit<ReturnType<typeof createCodexImageTool>, 'execute'> & {execute(...args: Parameters<ReturnType<typeof createCodexImageTool>['execute']>): Promise<{localPath: string; requestedModel: string; reportedModel?: string}>};
+type FixtureTool = Omit<ReturnType<typeof createCodexImageTool>, 'execute'> & {execute(...args: Parameters<ReturnType<typeof createCodexImageTool>['execute']>): Promise<{localPath: string; requestedModel: string; reportedModel?: string; requestedSize: string; size: string}>};
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
@@ -47,7 +48,7 @@ const ORIGINAL_REF = Object.freeze({
   name: 'codex-generated-original.png',
   sha256: 'fixture-sha256'.padEnd(64, '0'),
 })
-const execContext = (callId: string, signal = new AbortController().signal) => ({ callId, signal, agent: { id: 'session-image' } })
+const execContext = (callId: string, signal = new AbortController().signal) => ({ callId, signal, agent: { id: 'session-image' } } as unknown as Parameters<FixtureTool['execute']>[1])
 
 function fixture(overrides: Record<string, unknown> = {}) {
   const requests: {url: string; init: CapturedInit}[] = []
@@ -79,7 +80,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
       async remove() {},
     },
     async getAuth() { return { auth: { apiKey: 'oauth-access-token' } } },
-    async readCredential() { return { type: 'oauth', accountId: 'account-123' } },
+    async readCredential() { return { type: 'oauth', access: 'oauth-access-token', accountId: 'account-123' } },
     async fetch(url: string, init: CapturedInit) {
       requests.push({ url, init })
       return new Response(JSON.stringify({
@@ -128,9 +129,23 @@ test('image tool uses the Codex subscription endpoint and fixed safe defaults', 
     original: ORIGINAL_REF,
     background: 'opaque',
     quality: 'medium',
-    size: '1024x1024',
+    size: '1x1',
     localPath: 'C:\\DSH home\\images\\original',
   })
+})
+
+test('actual original dimensions win over requested or missing response dimensions', async () => {
+  for (const reportedSize of ['1024x1024', undefined]) {
+    const { tool } = fixture({
+      async fetch() {
+        return new Response(JSON.stringify({ size: reportedSize, data: [{ b64_json: ONE_PIXEL_PNG }] }))
+      },
+    })
+    const result = await tool.execute({ prompt: 'size regression', size: '1536x1024' }, execContext('actual-size'))
+    assert.equal(result.requestedSize, '1536x1024')
+    assert.equal(result.size, '1x1')
+    assert.match((tool.output.render({}, result)[0] as Extract<ContentBlock, {type:'text'}>).text, /Generated a 1x1 image\./)
+  }
 })
 
 test('generated and edited images expose a readable host path in model-visible content', async () => {
@@ -139,10 +154,10 @@ test('generated and edited images expose a readable host path in model-visible c
     const store = new OriginalImageStore(root)
     const { tool } = fixture({ originalImages: store })
     for (const referenceImages of [undefined, [IMAGE_REF]]) {
-      const deferred: unknown[] = []
+      const deferred: {source: unknown}[] = []
       const args = { prompt: 'path regression', ...(referenceImages ? { referenceImages } : {}) }
       const value = await tool.execute(args, (({
-        ...execContext('path-test'), parent: 'parent-call', deferContext: (message: unknown) => deferred.push(message),
+        ...execContext('path-test'), parent: 'parent-call', deferContext: (message: unknown) => deferred.push(message as {source: unknown}),
       }) as unknown as Parameters<typeof tool.execute>[1]))
       assert.equal(isAbsolute(value.localPath), true)
       assert.deepEqual(await readFile(value.localPath), Buffer.from(ONE_PIXEL_PNG, 'base64'))
@@ -151,7 +166,8 @@ test('generated and edited images expose a readable host path in model-visible c
       assert.match((content[0] as Extract<ContentBlock,{type: 'text'}>).text, /DSH host/u)
       assert.equal(content[1].type, 'image')
       assert.ok(JSON.stringify(deferred).includes('Original PNG saved'))
-      assert.equal('localPath' in ((tool.output.presentationMeta!(args, value)) as object), false)
+      assert.deepEqual(deferred.map(message => message.source), [{ kind: 'codex-subscription-image' }])
+      assert.equal('localPath' in (tool.output.presentationMeta!(args, value) as Record<string, unknown>), false)
     }
   } finally {
     await rm(root, { recursive: true, force: true })
@@ -182,8 +198,8 @@ test('model defaults and explicit model overrides reach the subscription endpoin
 
 test('disabling image editing during authentication prevents the outgoing image request', async () => {
   let imageEditing=true
-  const {tool,requests} = fixture({getFeatures:()=>({imageEditing}),getAuth:async()=>{imageEditing=false;return {auth:{apiKey:'test'}}}})
-  await assert.rejects(tool.execute({prompt:'edit',referenceImages:[IMAGE_REF]},((execContext('disabled')) as unknown as Parameters<typeof tool.execute>[1])),/disabled/)
+  const {tool,requests} = fixture({getFeatures:()=>({imageEditing}),getAuth:async()=>{imageEditing=false;return {auth:{apiKey:'oauth-access-token'}}}})
+  await assert.rejects(tool.execute({prompt:'edit',referenceImages:[IMAGE_REF]},execContext('disabled')),/disabled/)
   assert.equal(requests.length,0)
 })
 

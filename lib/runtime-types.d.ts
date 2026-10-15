@@ -6,6 +6,8 @@ import type { createSubscriptionConnection } from './subscription-connection.js'
 export interface SubscriptionProviderOptions {
     resolveSpeedMode?: (sessionId?: string) => SpeedMode | undefined;
     resolveOutputVerbosity?: () => OutputVerbosity;
+    resolveInputImageDetail?: () => unknown;
+    resolveReviewModel?: () => unknown;
     resolveContextMode?: () => ContextMode | undefined;
     resolveCustomContextWindow?: (modelKey?: string) => unknown;
     resolveRoute?: (request: {

@@ -1,4 +1,11 @@
-import type { AttachmentStore } from '@deepseek-ai/dsh-attachment';
+declare module '@deepseek-ai/dsh-llm' {
+    interface MessageSourceMap {
+        'codex-subscription-image': {
+            kind: 'codex-subscription-image';
+        };
+    }
+}
+import type { AttachmentStore, ImageMediaType } from '@deepseek-ai/dsh-attachment';
 import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools';
 import type { AuthReaders } from './model-types.js';
 import type { OriginalImageStore } from './image-original-store.js';
@@ -17,6 +24,7 @@ import { readImageDefaults } from './image-features.js';
 export declare const CODEX_IMAGE_TOOL_NAME = "codex_image_generate";
 export declare const CODEX_IMAGE_GENERATION_URL = "https://chatgpt.com/backend-api/codex/images/generations";
 export declare const CODEX_IMAGE_EDIT_URL = "https://chatgpt.com/backend-api/codex/images/edits";
+export declare function requestFailureReason(input: unknown): string;
 export declare function normalizeImageOptions(args: {
     quality?: unknown;
     background?: unknown;
@@ -29,6 +37,11 @@ export declare function normalizeImageOptions(args: {
 };
 /** Strictly decode one PNG returned by the subscription backend. */
 export declare function decodeCodexPng(value: unknown, maximumBytes: number): Uint8Array<ArrayBuffer>;
+export declare function readSessionImage(attachmentId: unknown, attachments: AttachmentPort, signal: AbortSignal | undefined, messages: SessionMessages): Promise<{
+    data: Uint8Array<ArrayBufferLike>;
+    mediaType: ImageMediaType;
+    name: string | undefined;
+}>;
 /** Create the DSH-native image-generation tool backed only by the ChatGPT subscription. */
 export declare function createCodexImageTool(options: ImageToolOptions): ToolDefinition;
 export {};

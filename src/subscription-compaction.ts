@@ -1,3 +1,4 @@
+
 import type { GenerateOptions, RequestMessage, StreamChunk, LlmAdapter } from '@deepseek-ai/dsh-llm';
 import type { StreamOptions } from '@earendil-works/pi-ai';
 import type { NetworkOptions } from './network-types.js';
@@ -15,11 +16,13 @@ const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 export function createCompactionBridge({ enabled = () => false, threshold = () => 100000, accountScope, diagnostic = () => {}, now = Date.now }: CompactionOptions) {
  const scope = new AsyncLocalStorage<CompactionState>()
+ const stats = { requests: 0, checkpointsSaved: 0, checkpointsReused: 0 }
  const wrapStream = (factory: (options: GenerateOptions) => AsyncIterable<StreamChunk>, options: GenerateOptions) => (async function* () {
   if (!enabled() || options.provider !== 'openai-codex') { yield* factory(options); return }
-  const identity = await accountScope(options)
-  if (!identity) throw new Error('Compaction requires a stable account identity')
-  const state: CompactionState = { identity: hash([identity, options.model]), original: options.messages, blocks: [], suffix: undefined, completed: false }
+  const { access, accountId } = await accountScope(options)
+  if (!access || !accountId) throw new Error('Compaction requires a stable account identity and credential')
+  // Pin the credential that owns the checkpoint for the whole stream, including prepared calls.
+  const state: CompactionState = { access, identity: hash([accountId, options.model]), original: options.messages, blocks: [], suffix: undefined, completed: false }
   let messages = options.messages
   for (let i = messages.length - 1; i >= 0; i--) {
    const candidate = (messages[i].source as { replayState?: { response?: Record<string, unknown> | null } | null } | undefined)?.replayState?.response?.[key] as RawCheckpoint | null | undefined
@@ -44,24 +47,35 @@ export function createCompactionBridge({ enabled = () => false, threshold = () =
     if (event.type === 'finish' && ['stop', 'tool-calls'].includes(event.reason?.kind) && !options.signal?.aborted && state.completed && state.captured?.length && event.replayState) {
      const items = state.captured
      const checkpoint = { createdAt: now(), scope: state.identity, prefix: historyHash(state.original), content: hash(state.blocks.filter(Boolean)), items, digest: hash(items) }
-     event = { ...event, replayState: { ...event.replayState, response: { ...(event.replayState.response as Record<string, unknown> | null | undefined), [key]: checkpoint } } }
+     event = { ...event, replayState: { ...event.replayState, response: { ...(event.replayState.response as Record<string, unknown>), [key]: checkpoint } } }
+     stats.checkpointsSaved = Math.min(Number.MAX_SAFE_INTEGER, stats.checkpointsSaved + 1)
     }
     yield event
    }
   } finally { await scope.run(state, () => iterator.return?.()) }
  })()
  return {
+  snapshot: () => ({ ...stats }),
+  resolveApiKey: (resolve: () => Promise<string>): Promise<string> => {
+   const access = scope.getStore()?.access
+   return access === undefined ? resolve() : Promise.resolve(access)
+  },
   wrapAdapter<T extends CompactionAdapter>(adapter: T): T {
    return new Proxy(adapter, { get(target, property) {
     if (property === 'stream') return (options: GenerateOptions) => wrapStream(o => target.stream(o), options)
     if (property === 'prepareCall') return async (...args: Parameters<LlmAdapter['prepareCall']>) => { const call = await target.prepareCall(...args); return { ...call, stream: (options: GenerateOptions) => wrapStream(o => call.stream(o), options) } }
-    const value = Reflect.get(target, property, target)
+    const value: unknown = Reflect.get(target, property, target)
     return typeof value === 'function' ? value.bind(target) : value
    } })
   },
   preparePayload(payload: CodexPayload, contextWindow?: number): CodexPayload {
    const state = scope.getStore()
    if (!state) return payload
+   if (!state.counted) {
+    state.counted = true
+    stats.requests = Math.min(Number.MAX_SAFE_INTEGER, stats.requests + 1)
+    if (state.suffix) stats.checkpointsReused = Math.min(Number.MAX_SAFE_INTEGER, stats.checkpointsReused + 1)
+   }
    const configured = threshold()
    if (!Number.isSafeInteger(configured) || configured < 1000) throw new Error('Invalid compaction threshold')
    const limit = Number.isFinite(contextWindow) && contextWindow! >= 2000

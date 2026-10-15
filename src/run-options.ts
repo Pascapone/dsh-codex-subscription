@@ -26,7 +26,7 @@ export function createRunOptions(ctx: Context, settings: {
   const runtimeSelections = new Map<Agent, Selection>();
   const savingSpeeds = new Map<string, SpeedMode>();
   const changing = new Set<string>();
-  const speedOf = (id: string): SpeedMode => savingSpeeds.get(id) ?? (settings.get().sessionSpeedModes?.[id] === 'fast' ? 'fast' : 'standard');
+  const speedOf = (id: string): SpeedMode => savingSpeeds.get(id) ?? (settings.get().sessionSpeedModes?.[id] === 'ultrafast' ? 'ultrafast' : settings.get().sessionSpeedModes?.[id] === 'fast' ? 'fast' : 'standard');
   const pendingOf = (agent: Agent): Selection | undefined => {
     const pending = ctx.sessionProjections.stateOf(agent.session, 'modelSelection')?.pending;
     return pending ? { provider: pending.provider, model: pending.model,

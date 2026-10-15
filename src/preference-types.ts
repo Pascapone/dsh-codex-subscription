@@ -8,5 +8,5 @@ export type PreferenceScope = Pick<ConfigForm<PreferenceValue>, 'subscribe'> & {
   set?(...args: Parameters<ConfigForm<PreferenceValue>['set']>): Promise<Awaited<ReturnType<ConfigForm<PreferenceValue>['set']>> | void>;
 };
 export type ContextModelDescriptor = Pick<ContextModelGroup, 'key' | 'maximum'> & Partial<Omit<ContextModelGroup, 'key' | 'maximum'>>;
-export type PreferenceWireView = PreferenceValue & { contextModels?: unknown; verbosityModels?: unknown; fastModels?: unknown; catalogStatus?: unknown };
+export type PreferenceWireView = PreferenceValue & { contextModels?: unknown; verbosityModels?: unknown; fastModels?: unknown; catalogStatus?: { source: string; refresh: string } };
 

@@ -81,12 +81,12 @@ test('only transient WebSocket failures receive transport context', () => {
   }
 })
 
-test('only the exact upstream retry-buffer error receives transport context', () => {
+test('upstream retry-buffer errors stay untouched for dsh-robust', () => {
   const message = 'exceeded request buffer limit while retrying upstream'
   const event = { type: 'error', reason: 'error', error: { errorMessage: message } } as unknown as Parameters<typeof normalizeTransportEvent>[0]
   const normalized = normalizeTransportEvent(event)
   assert.ok(normalized.type === 'error')
-  assert.equal(normalized.error.errorMessage, `Network transport failure: ${message}`)
+  assert.equal(normalized, event)
   assert.equal(normalizeTransportEvent(event, AbortSignal.abort()), event)
   const aborted = { ...event, reason: 'aborted' } as typeof event
   assert.equal(normalizeTransportEvent(aborted), aborted)
@@ -96,7 +96,7 @@ test('only the exact upstream retry-buffer error receives transport context', ()
   }
 })
 
-test('DSH can retry HTTP and streamed gateway buffer failures without plugin replay', async t => {
+test('HTTP and streamed gateway buffer failures reach dsh-robust without plugin replay', async t => {
   const message = 'exceeded request buffer limit while retrying upstream'
   let requests = 0
   let streamed = false
@@ -121,9 +121,8 @@ test('DSH can retry HTTP and streamed gateway buffer failures without plugin rep
     for await (const chunk of adapter.stream({ provider: 'openai-codex', model: 'gpt-5.6-luna', messages: [{ role: 'user', content: [{ type: 'text', text: 'fixture' }] }] })) chunks.push(chunk)
     const finish = chunks.find(chunk => chunk.type === 'finish')
     assert.ok(finish?.type === 'finish' && finish.reason.kind === 'error', JSON.stringify(chunks))
-    assert.equal(finish.reason.failure.code, 'TRANSPORT')
-    assert.ok(policy.retryableCodes.includes(finish.reason.failure.code))
-    assert.equal(finish.reason.failure.message, `Network transport failure: ${message}`)
+    assert.equal(finish.reason.failure.code, 'PI_AI_ERROR')
+    assert.equal(finish.reason.failure.message, message)
   }
   assert.equal(requests, 2)
 })

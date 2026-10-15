@@ -3,8 +3,8 @@ allowBuilds:
   koffi: false
   protobufjs: false
 
-# pnpm 11 holds new releases for one day by default. DSH 0.1.7-rc.2 is the
-# audited compatibility baseline, so only its exact locked DeepSeek package
+# pnpm 11 holds new releases for one day by default. DSH 0.2.1-alpha.1 is the
+# audited development cohort, so only its exact locked DeepSeek package
 # graph bypasses that age gate. The compatibility workflow regenerates this
 # bounded block from pnpm-lock.yaml; broad scope wildcards are forbidden.
 minimumReleaseAge: 1440
@@ -98,6 +98,7 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-web@0.2.1-alpha.1'
   - '@deepseek-ai/dsh-workspace@0.2.1-alpha.1'
   - '@deepseek-ai/dsh@0.1.7-rc.2'
+  - '@deepseek-ai/dsh@0.2.1-alpha.1'
   - '@deepseek-ai/node-addon-system-darwin-arm64@0.1.2'
   - '@deepseek-ai/node-addon-system-darwin-x64@0.1.2'
   - '@deepseek-ai/node-addon-system-linux-arm64@0.1.2'

@@ -1,8 +1,9 @@
+
 type FixtureRpcCall = (channel: string, method: string, payload?: unknown) => Promise<unknown>;
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createPreferenceController } from '../src/preference-controller.js'
-import { CONTEXT_MODE_EXTENDED, CONTEXT_MODE_FIELD, CONTEXT_MODE_STANDARD } from '../src/settings-contract.js'
+import { AUTO_QUOTA_RETRY_FIELD, CONTEXT_MODE_EXTENDED, CONTEXT_MODE_FIELD, CONTEXT_MODE_STANDARD, DISABLED_MODELS_FIELD } from '../src/settings-contract.js'
 
 function harness({ fail = false, rpcCall }: {fail?: boolean; rpcCall?: FixtureRpcCall} = {}) {
   let native = {
@@ -125,6 +126,20 @@ test('session speed does not leak into another session and rolls back failed sav
   assert.equal(controller.getSnapshot().sessionSpeedModes['session-a'], undefined)
   assert.equal(controller.getSnapshot().error, true)
   controller.dispose()
+})
+
+
+test('the full model list stays visible while a disabled choice is saved', async () => {
+  const availableModels = [{ id: 'gpt-5.5', name: 'GPT-5.5' }, { id: 'gpt-6-astra', name: 'GPT-6 Astra' }]
+  const { controller, settle } = harness({ rpcCall: async () => ({ ok: true, value: { availableModels } }) })
+  await controller.load()
+  assert.deepEqual(controller.getSnapshot().availableModels, availableModels)
+  const saving = controller.set({ [DISABLED_MODELS_FIELD]: ['gpt-5.5'] })
+  assert.deepEqual(controller.getSnapshot().disabledModels, ['gpt-5.5'])
+  assert.deepEqual(controller.getSnapshot().availableModels, availableModels)
+  settle()
+  await saving
+  assert.deepEqual(controller.getSnapshot().disabledModels, ['gpt-5.5'])
 })
 
 test('preference save reflects the chosen value while keeping ready surfaces mounted', async () => {
@@ -264,4 +279,44 @@ test('a stale account model response cannot replace the newer directory', async 
   assert.equal(await oldRefresh, false)
   assert.deepEqual(controller.getSnapshot().contextModels, astraModels)
   assert.deepEqual(controller.getSnapshot().verbosityModels, ['gpt-6-astra'])
+})
+
+test('a write the host publishes a moment late is accepted, not reverted', async () => {
+  let native: ReturnType<Parameters<typeof createPreferenceController>[0]['getSnapshot']> = { status: 'ready', writable: true, value: { quickQuotaMode: 'forecast' } }
+  const listeners = new Set<() => void>()
+  const scope = {
+    getSnapshot: () => native,
+    subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener) },
+    async set(field: string, value: unknown) {
+      setTimeout(() => { native = { ...native, value: { ...native.value, [field]: value } }; for (const listener of listeners) listener() }, 60)
+    },
+  }
+  const controller = createPreferenceController(scope, { call: async () => ({ ok: true, value: {} }) } as unknown as NonNullable<Parameters<typeof createPreferenceController>[1]>)
+  await controller.set({ quickQuotaMode: 'percent' })
+  assert.equal(controller.getSnapshot().quickQuotaMode, 'percent')
+  assert.equal(controller.getSnapshot().error, false)
+  controller.dispose()
+})
+
+test('a write the host never applies still reports failure and restores the shown value', async () => {
+  const native: ReturnType<Parameters<typeof createPreferenceController>[0]['getSnapshot']> = { status: 'ready', writable: true, value: { quickQuotaMode: 'forecast' } }
+  const scope = { getSnapshot: () => native, subscribe: () => () => {}, async set() {} }
+  const controller = createPreferenceController(scope, { call: async () => ({ ok: true, value: {} }) } as unknown as NonNullable<Parameters<typeof createPreferenceController>[1]>)
+  const started = Date.now()
+  await controller.set({ quickQuotaMode: 'percent' })
+  assert.equal(controller.getSnapshot().error, true)
+  assert.equal(controller.getSnapshot().quickQuotaMode, 'forecast')
+  assert.ok(Date.now() - started < 3000)
+  controller.dispose()
+})
+
+test('automatic quota retry defaults off and persists an explicit enable', async () => {
+  const { controller, settle } = harness()
+  assert.equal(controller.getSnapshot().autoQuotaRetry, false)
+
+  const pending = controller.set({ [AUTO_QUOTA_RETRY_FIELD]: true })
+  assert.equal(controller.getSnapshot().autoQuotaRetry, true)
+  settle()
+  await pending
+  assert.equal(controller.getSnapshot().autoQuotaRetry, true)
 })

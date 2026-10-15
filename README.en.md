@@ -1,12 +1,14 @@
+<p align="center"><img src="icon-subscription.webp" width="128" height="128" alt="DSH Codex Subscription icon"></p>
+
 <div align="center">
 
-# DSH Codex Subscription — Use ChatGPT subscriptions in DeepSeek Harness
+# DSH Codex Subscription
 
 [简体中文](https://github.com/Pascapone/dsh-codex-subscription/blob/main/README.md) · **English**
 
 **Use your ChatGPT / Codex subscription directly in DeepSeek Harness**
 
-No OpenAI API key or Codex CLI. Models, search, quota, and image generation stay inside DSH.
+Sign in with ChatGPT Plus / Pro to use GPT-6 and other Codex models, quota, web search, and image generation inside DSH. No OpenAI API key or Codex CLI.
 
 [![CI](https://github.com/Pascapone/dsh-codex-subscription/actions/workflows/ci.yml/badge.svg)](https://github.com/Pascapone/dsh-codex-subscription/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@pascapone/dsh-codex-subscription?logo=npm&label=npm)](https://www.npmjs.com/package/@pascapone/dsh-codex-subscription)
@@ -14,57 +16,86 @@ No OpenAI API key or Codex CLI. Models, search, quota, and image generation stay
 [![MIT](https://img.shields.io/badge/license-MIT-111111.svg)](LICENSE)
 [![Star](https://img.shields.io/github/stars/Pascapone/dsh-codex-subscription?style=flat&logo=github&label=Star)](https://github.com/Pascapone/dsh-codex-subscription/stargazers)
 
-[Three-step start](#three-step-start) · [Install](#install) · [Contribute](CONTRIBUTING.md) · [Update and uninstall](#update-and-uninstall)
+[Features](#feature-overview) · [Install](#install) · [Daily use](#inside-the-plugin) · [Examples](#from-sketch-to-image) · [User guide](docs/GUIDE.en.md) · [Update and uninstall](#update-and-uninstall)
 
 </div>
 
-<p align="center">
-  <img src="docs/assets/codex-subscription-overview-en.webp" width="900" alt="Use ChatGPT and Codex subscriptions in DeepSeek Harness: sign in without an API key, choose models and view remaining quota">
-</p>
+<p align="center"><img src="docs/assets/product-account-demo-en.png" width="1100" alt="Codex subscription account and quota interface with model choices, quota windows and alerts; demonstration data"></p>
 
-Compatible with DSH `0.1.7-rc.2` and the `0.2.1-alpha.1` preview, while retaining previously supported versions. The preview uses Pi `0.87.1`; the provider forwards its normalized transcript context without rebuilding the prompt or tools.
+## Feature overview
 
-## Three-step start
+Subscription access, model controls, quota management, and image creation in one DSH workflow. Each capability is listed below; model access and quota depend on your account.
 
-1. **Install the plugin.** Open **Plugins → Add plugin**, enter `@pascapone/dsh-codex-subscription` in **Package name or address**, and click **Install**.
-2. **Sign in.** Follow the installation result; save your work and restart only if requested. Open **Settings -> Codex**, and choose browser sign-in. No Codex CLI and no pasted token are required.
-3. **Use Codex.** Select a Codex model. Quota, subscription search, image generation, and Fast mode remain inside DSH.
+### Models and search
 
-See below for detailed installation steps, terminal commands, updates, and removal.
+| Feature | What you can do | Availability / setup |
+| --- | --- | --- |
+| **Subscription sign-in** | Sign in to ChatGPT and use Codex subscription models without an API key | Normal chat needs no Codex CLI |
+| **Model catalog sync** | Read available models and reasoning levels from your account, with manual refresh; models marked for retirement show their retirement date next to the model name, without automatically switching your selection | New models appear when your account offers them; a refreshed account catalog is authoritative; before refresh, bundled metadata keeps current models available without granting account access |
+| **Model list** | Show or hide individual models in the composer picker under Models & runtime | Display only; selected models and requests still work |
+| **Default model** | Choose the model a new conversation opens with under Models & runtime → Models | Writes the DSH default model setting, the same one a model switch inside a chat writes; unset it to follow the DSH default |
+| **Reasoning levels** | Choose supported reasoning effort in the composer | Levels vary by model |
+| **Speed tiers** | Switch supported models between Standard and Fast; Ultrafast (Beta) too when the account catalog offers it, with a lightning indicator | Standard by default; Fast and Ultrafast increase usage, and Ultrafast is Pro 500 only today |
+| **Response verbosity** | Request short, medium, or detailed responses | Follows the model default unless changed |
+| **Input image detail** | Choose Low, High, Original, or Auto detail for images sent to the chat model | Affects input tokens; Auto by default |
+| **Subscription web search** | Use Codex search or choose DSH search | Auto, DSH, and Codex routing options |
+| **Search scope** | Choose live / cached search, disable search, or restrict domains | Configure under Models & runtime |
+| **Stream inactivity timeout** | Set how long a request can receive no streamed data before it is aborted | 10 minutes by default; not an overall response deadline |
+| **Context budget** | Use standard, extended, or custom budgets per model | Limited by the model catalog |
+| **GPT-Reserve** | Select the reserve model when your account offers it | Experimental; no promise of a separate reserve quota |
 
-## Why this plugin
+### Accounts and quota
 
-| Capability | What you get |
-| --- | --- |
-| **Subscription models** | Sign in to ChatGPT and use Codex without an OpenAI API key or Codex CLI |
-| **Recoverable and diagnosable** | Sign-in state reconciles automatically; failed reads can be retried in place, while timeouts and stale account responses cannot overwrite current state; Settings can create a support report without credentials or account identifiers |
-| **Visible quota** | Keep backend-provided standard Codex, Spark, and other limits separate, with reset times |
-| **Composer quota** | Choose a compact percentage, progress bar, Beta runway forecast, or no inline display |
-| **Safe quota reset** | See each reset credit separately and deliberately try one with a cooldown and acknowledgement |
-| **Subscription search** | Explicitly route search globally through DSH default search or the signed-in Codex subscription |
-| **Subscription transcription (experimental)** | Enable in **Settings → Codex → Advanced**. The composer microphone records directly in this plugin: X discards, Stop inserts text into your draft, Arrow transcribes and sends. Audio goes to ChatGPT using your existing OAuth login. No separate voice plugin required; off by default. If another voice plugin uses the default microphone slot, its control takes precedence without disabling Codex's other features. |
-| **Codex image generation and editing (Beta)** | Generate without references, or explicitly edit one selected image; preview, zoom, annotate regions, download the original, and get the original host path for new or edited images |
-| **Fast mode** | Switch between Standard and Fast directly in the composer |
-| **Model-aware context** | Keep catalog defaults, use each model's supported extended window, or enter a full numeric token limit for each model; Settings refreshes the model directory on open, account changes, and connection resets without overwriting an unsaved draft |
-| **Headless runs** | Use the same signed-in Codex provider for one-shot DSH tasks that print their answer and exit |
+| Feature | What you can do | Availability / setup |
+| --- | --- | --- |
+| **Multiple accounts** | Add, switch, remove, or sign out of all accounts | Settings → Account |
+| **Quota details** | View short / weekly windows, reset times, and separate quota groups | Only backend-provided windows and groups are shown |
+| **Credits and reset cards** | View extra Credits, spending caps, and available reset cards | Shown when returned for your account |
+| **Composer quota** | See remaining quota as a percentage or progress bar while chatting | Off by default; choose your display mode |
+| **Runway estimate** | Estimate remaining time from recent usage | Beta; optional estimate, not a guarantee |
+| **Quota alerts** | Use fixed, early, or custom short / long-window thresholds | 20% remaining by default; can be disabled |
+| **Redeem reset cards** | Use an available reset card after confirmation | Confirmation and waiting safeguards; server decides the result |
+| **Retry after reset** | Wait for a confirmed short-window reset before continuing | Off by default; waiting can be stopped |
 
-These capabilities reuse the same local ChatGPT sign-in. Subscription routing failures stay visible and never silently switch to another paid route.
+### Images and sketching
 
-Fresh DSH Multi-Agent delegations support `speed_mode: "standard" | "fast"` (Standard by default). Speed is saved for the child before its first request, does not change the parent's speed, and survives resume. Unsupported Fast models are rejected; failed child starts remove the prepared preference. Both updated plugins are required for Fast delegation.
+| Feature | What you can do | Availability / setup |
+| --- | --- | --- |
+| **Image generation** | Generate through your subscription and adjust available request model / quality options; ask for a transparent-background PNG when needed | Beta; on by default, can be disabled |
+| **Reference image editing** | Continue refining an image with references | Beta; on by default, can be disabled |
+| **Image viewing and download** | Completed images appear after the answer without expanding tool activity; zoom, pan, fit to window, and download verified originals | Built-in viewer; older images may only have previews |
+| **Region-based editing** | Mark regions, add notes, and continue editing with location references | Fills the composer for you to review and send |
+| **Manual canvas** | Choose an aspect ratio and draw with pen, pencil, marker, and erasers | Beta; canvas off by default |
+| **Shapes and text** | Draw lines, arrows, shapes, native curves, and editable text / objects | Available in the sketch canvas |
+| **Layers and image import** | Work in layers and bring images into the canvas | Images are managed as layers |
+| **Smoothing and navigation** | Smooth complete strokes after release; pan, zoom, undo, and redo | Shortcuts can be customized or disabled |
+| **Multiple drafts** | Save and reopen up to 20 local drafts | Stored in the current browser |
+| **Import and export** | Import/export layered PSD, export PNG, or exchange native drafts that preserve editable strokes | PSD supports 8-bit RGB pixel layers; drafts preserve native editable objects |
+| **Agent drawing** | Ask the agent to draw with `@sketch`, follow progress, and stop it; the agent can draw whole stages in SVG, imported as editable native strokes | Beta; off by default, requires the canvas |
+| **Result preview for the model** | Explicitly request a canvas preview, reference comparison, and grid between drawing stages | Requires Agent drawing; adds image input usage, no automatic finish preview |
 
-## Product screen
+### Advanced capabilities and maintenance
 
-<p align="center">
-  <img src="docs/assets/subscription-account-en.png" width="820" alt="DSH Codex subscription main screen: ChatGPT sign-in, remaining quota and composer preferences">
-</p>
+| Feature | What you can do | Availability / setup |
+| --- | --- | --- |
+| **Codex independent subtasks** | Reuse subscription sign-in and workspace permissions; select allowed models and reasoning levels | Beta; DSH by default, Codex requires the optional component and model-selection setup |
+| **Subtask component management** | Install, disable, or uninstall the official Codex subtask component from settings | Managed by supported DSH hosts; no extra login |
+| **Cloud context compaction** | Continue long conversations using Codex compaction while retaining DSH history and native compaction | Beta / experimental; off by default, enabled requests use SSE |
+| **WebSocket transport** | Experimentally reuse connections and context transfers, with SSE fallback on connection failure | Beta / experimental; SSE by default, no speed guarantee |
+| **Codex reviewer for Auto review** | DSH Auto review judges tool calls with Codex's own review model; DSH keeps its review policy and allow/deny flow | Beta; off by default, applies when your account catalog offers the model |
+| **Support diagnostics** | Inspect prerequisites and recent operation results, and copy a short report (about 1 KB; the full one can be copied separately) without credentials or conversation text | Settings → Maintenance; unverified does not mean broken |
+| **Forecast cache cleanup** | Inspect and clear local quota forecast history | Keeps sign-in, drafts, originals, and shared dependencies |
 
-The actual Account & preferences screen shows sign-in status, subscription quota and composer preferences. Account, quota, balance and time values are demo data, not fixed plan entitlements. Advanced options and optional components are described below.
+[Usage details, limitations, and optional components →](docs/GUIDE.en.md)
 
 ## Prepare DSH
 
+Verified against DSH `0.2.0-rc.2` (`next` channel) and `0.1.7-rc.2` (`latest` channel), with earlier accepted versions still supported.
+
 This plugin supports the latest DeepSeek Harness release recorded in its package metadata and requires a ChatGPT account that currently has Codex access.
 
-- Do not want to configure Node.js? Use [DSH-Portable](https://github.com/WSL043/DSH-Portable), a community portable desktop distribution for Windows, macOS, and Linux.
+- **Recommended: the official desktop app.** DeepSeek now ships a [DeepSeek Harness desktop app](https://www.deepseek.com/harness/) (macOS on Apple Silicon and 64-bit Windows; preview, open source). It needs no Node.js setup: install it, then add this plugin from the Plugins page as described below. The desktop app, the web app and the CLI share one DSH plugin system; this plugin's end-to-end acceptance is mainly run on the web app, so please [open an issue](https://github.com/Pascapone/dsh-codex-subscription/issues) if the desktop app misbehaves.
+- Need Linux, or prefer a community portable build? Use [DSH-Portable](https://github.com/WSL043/DSH-Portable), a community portable desktop distribution for Windows, macOS, and Linux.
 - Prefer the official route? Follow the [DeepSeek Harness run guide](https://github.com/deepseek-ai/deepseek-harness#run).
 
 ## Install
@@ -72,22 +103,16 @@ This plugin supports the latest DeepSeek Harness release recorded in its package
 ### Install from the Plugins page (recommended)
 
 1. Open **Plugins → Add plugin** in DSH.
-2. Paste a package name into the **Package name or address** field:
+2. Paste this package name, with its version, into the **Package name or address** field:
 
    ```text
-   @pascapone/dsh-codex-subscription
-   ```
-
-   For DSH `0.1.7-rc.2`, use this fork's GitHub address until `2.2.1` is published to npm:
-
-   ```text
-   https://github.com/Pascapone/dsh-codex-subscription
+   @pascapone/dsh-codex-subscription@2.5.9
    ```
 
 3. Click **Install** and wait for completion. Follow the page instructions; save your work before restarting if requested.
 4. Open **Settings → Codex**, sign in to ChatGPT, then select a Codex model in your conversation.
 
-The GitHub address installs this fork's `2.2.1` build with DSH `0.1.7-rc.2` support. The unversioned package name installs the latest published npm release, which does not yet include this update. Enter only one package name or address, not a terminal command.
+Why the version is included: DSH's plugin page only installs versions that are at least 24 hours old, so the bare package name can install an older release during the first day after a new one, and that older release may not support your DSH. With the version you get exactly this release; a day after release the bare `@pascapone/dsh-codex-subscription` also resolves to the latest stable release. Other version numbers are on the [releases page](https://github.com/Pascapone/dsh-codex-subscription/releases).
 
 <details>
 <summary>Terminal installation (with an existing dsh command)</summary>
@@ -112,195 +137,144 @@ dsh --profile headless "Reply with only the word: ok"
 
 </details>
 
-## Feature details
+## Inside the plugin
 
-### Add instructions while a task is running
+<details>
+<summary><b>Interface demo (animation, click to expand)</b>: models, prompts, images, annotation, sketch board, quota and resets</summary>
+<br>
+<p align="center"><img src="docs/assets/readme-demo-en.webp" width="1100" alt="Demo: sign in with ChatGPT, pick a subscription model, ask, generate an image, view and annotate it, continue on the sketch board, and check quota and resets"></p>
+</details>
 
-Use DSH’s native message queue: messages sent during generation can wait for the next turn. Where the host offers interjection, its shortcut delivers queued input at the next step of the current turn. This does not immediately rewrite a response already being generated.
+### Everyday controls, right in the composer
 
-### GPT-Reserve (Experimental)
+Choose a model, adjust reasoning, switch speed tiers, and check remaining quota without opening settings for every request.
 
-When the account’s official catalog advertises `gpt-reserve`, it appears at the end of the model picker as an experimental option. Availability and billing are determined by the service; a successful response does not confirm use of a separate reserve allowance. Even when ordinary Codex usage reaches 100%, the service may list `gpt-reserve` in the model catalog without returning a separate Reserve quota bucket. In that case, the composer treats Reserve quota as unknown and does not substitute ordinary Codex quota. An “allowed” response does not prove that a request was charged to Reserve.
+<p align="center"><img src="docs/assets/composer-quota-en.png" width="800" alt="DSH composer with GPT-6-Luna, reasoning controls and remaining quota"></p>
 
-### GPT-6 Sol / Luna
+### Accounts and preferences, in one place
 
-GPT-6.1 Sol, GPT-6 Sol and GPT-6 Luna are listed in [Codex's model catalog](https://github.com/openai/codex/blob/1983c48fd1/codex-rs/models-manager/models.json). The plugin reads available models and reasoning levels from the current account's Codex catalog. It also bundles 6.1 Sol, Sol and Luna as offline fallbacks for hosts whose installed pi-ai catalog predates these models; a successfully refreshed account catalog remains authoritative for availability and capabilities. GPT-6.1 Sol defaults to 500000 tokens following [OpenAI's announcement](https://x.com/thsottiaux/status/2109430343346581527), including when the installed or account catalog still reports 272000. An explicit lower account maximum is respected; the existing offline extended limit remains 872000, with Fast support. Other models keep their current defaults. Selecting a fallback does not grant server-side model access.
+Open **Settings → Codex** to manage accounts and quota. Enable other features as your tasks need them.
 
-### Per-model context limits
+<details>
+<summary>What is in each settings tab?</summary>
 
-Open **Settings → Codex → Advanced → Context window → Configure token limits per model** to switch to Custom and edit full token counts. Existing values seed the inputs, except GPT-6.1 Sol starts at 500000. Values save on blur or Enter and persist across mode changes and catalog refreshes; existing custom values are not replaced by an upgrade. Standard restores model defaults; Extended uses each model's maximum. These are local DSH context budgets, not server-side capacity upgrades, and custom values remain bounded by the model maximum.
+| Settings tab | What it controls |
+| --- | --- |
+| **Account** | Sign-in, account switching, reset times, quota display and alerts |
+| **Models & runtime** | Subscription search, context budget, connections and subtasks |
+| **Images & sketch** | Separate switches for image generation, the canvas, and agent drawing |
+| **Maintenance** | Support diagnostics and local quota forecast cache |
+
+**Model-aware context** follows your account's model directory; refreshing preserves your unsaved draft. Quota groups use backend-provided values, including separate buckets such as Spark.
+
+Subscription failures remain visible: no silent fallback to another paid route.
+
+</details>
+
+[Read the complete user guide →](docs/GUIDE.en.md)
+
+## From sketch to image
+
+Image generation, editing, and the sketch canvas are **Beta**. The canvas and agent drawing are off by default; enable them under Images & sketch when needed.
+
+**Sketch → Attach to the composer → Describe the result → Generate.**
+
+Draw by hand with the canvas button, or ask the agent with `@sketch` and your drawing request.
+
+<table>
+<tr><th width="50%">Native sketch drawn by the agent</th><th width="50%">Image generated with the sketch as the only reference</th></tr>
+<tr><td><img src="docs/assets/sketch-lighthouse-sketch.webp" alt="Lighthouse sketch drawn by GPT-6.1-Sol" width="480"></td><td><img src="docs/assets/sketch-lighthouse-result.webp" alt="Watercolor lighthouse poster generated from the sketch" width="480"></td></tr>
+</table>
+
+**GPT-6.1-Sol · Xhigh** on the official desktop app 0.2.0-rc.2: one `@sketch` message produced 6 layers and 229 editable native strokes, then called GPT Image 2 (quality: high) once with the sketch as the only reference. About 13 minutes end to end.
+
+The prompt (sent in Chinese): draw "Lighthouse and Homecoming" on a 4:3 canvas — a red-and-white lighthouse on a rocky cape casting a fan of light, an orange-sailed fishing boat heading home with a V-shaped wake, a half-risen sun, three cloud bands, three gulls and surf around the rocks, in six named layers; then turn the sketch into a warm watercolor travel poster with no text, keeping the composition.
+
+<details>
+<summary>Advanced examples · Mechanical cutaway, blue-green landscape and a reference-copy challenge</summary>
+
+The first two subjects were chosen to expose quality differences: a mechanical cutaway tests structure and detail (meshing gears, pendulum, chains, tiny figures on a staircase), and a Song-dynasty blue-green landscape tests composition and taste (the "three distances", empty space, texture strokes and mineral color). The same prompt went to **GPT-6.1-Sol · Xhigh** and **GPT-6-Astra · Low**, one run each, on the official desktop app, with GPT Image 2 (quality: high).
+
+**Clock Tower Cutaway**
+
+<table>
+<tr><th></th><th width="45%">Native sketch</th><th width="45%">Generated image</th></tr>
+<tr><td><b>Sol<br>Xhigh</b></td><td><img src="docs/assets/sketch-clocktower-sol-sketch.webp" alt="Clock tower sketch by Sol" width="400"></td><td><img src="docs/assets/sketch-clocktower-sol-result.webp" alt="Clock tower illustration from Sol's sketch" width="400"></td></tr>
+<tr><td><b>Astra<br>Low</b></td><td><img src="docs/assets/sketch-clocktower-astra-sketch.webp" alt="Clock tower sketch by Astra" width="400"></td><td><img src="docs/assets/sketch-clocktower-astra-result.webp" alt="Clock tower illustration from Astra's sketch" width="400"></td></tr>
+</table>
+
+Sol first computed tooth counts (48, 38, 27, 46, 36, 24, 34, 30, 22) and pitch circles for the nine gears with a script, then placed them in mesh; drawing took about an hour. Its first image request failed; it asked, was allowed one retry, and succeeded. Astra Low finished sketch and image in about 5 minutes, with a simpler structure and gears that are not individually calibrated.
+
+**A Thousand Green Peaks**
+
+<table>
+<tr><th></th><th width="45%">Native sketch</th><th width="45%">Generated image</th></tr>
+<tr><td><b>Sol<br>Xhigh</b></td><td><img src="docs/assets/sketch-shanshui-sol-sketch.webp" alt="Landscape sketch by Sol" width="400"></td><td><img src="docs/assets/sketch-shanshui-sol-result.webp" alt="Blue-green landscape from Sol's sketch" width="400"></td></tr>
+<tr><td><b>Astra<br>Low</b></td><td><img src="docs/assets/sketch-shanshui-astra-sketch.webp" alt="Landscape sketch by Astra" width="400"></td><td><img src="docs/assets/sketch-shanshui-astra-result.webp" alt="Blue-green landscape from Astra's sketch" width="400"></td></tr>
+</table>
+
+Sol Xhigh took about 28 minutes and Astra Low about 5. Both kept the main peak, waterfall, plank path and river in place; Sol's receding ranges and mist bands are more complete.
+
+**"DeepSeek-chan" · copy a reference image (draw only, no image generation)**
+
+Here the reference image is attached to the message and the model copies it on the canvas, which tests proportions, gradient long hair, lace trim, hand lettering and small motifs. The reference is a community sticker of the DeepSeek mascot girl. Each cell is one run on the official desktop app with no image generation; the native-stroke runs had "return preview when finished" enabled, and the SVG runs added one sentence to the same prompt asking for the svg command on every layer.
+
+<table>
+<tr><th width="20%">Reference</th><th width="40%">Native strokes</th><th width="40%">SVG</th></tr>
+<tr><td rowspan="2"><img src="docs/assets/sketch-niang-reference.webp" alt="DeepSeek-chan sticker reference" width="220"></td><td><img src="docs/assets/sketch-niang-sol-native.webp" alt="Sol native strokes" width="330"><br><sub><b>Sol Xhigh</b> · 40 min 50 s · 526 strokes</sub></td><td><img src="docs/assets/sketch-niang-sol-svg.webp" alt="Sol SVG" width="330"><br><sub><b>Sol Xhigh</b> · 31 min 48 s · 463 strokes</sub></td></tr>
+<tr><td><img src="docs/assets/sketch-niang-astra-native.webp" alt="Astra native strokes" width="330"><br><sub><b>Astra Medium</b> · about 7 min · 332 strokes</sub></td><td><img src="docs/assets/sketch-niang-astra-svg.webp" alt="Astra SVG" width="330"><br><sub><b>Astra Medium</b> · 10 min 5 s</sub></td></tr>
+</table>
+
+The SVG runs have finer hair highlights, lace trim and lettering, and Sol was almost 9 minutes faster with SVG than stroke by stroke; Astra spent about 3 extra minutes on SVG for clearly richer detail. Neither model got the face shape right (too long and flat) or the small whale motif on the apron, though Sol's whale looks more like a whale.
+
+**The same challenge again, with the model checking itself against the reference**
+
+Same prompt and the same way of attaching the image as above; the plugin just gives the model two more things. It can use `reference` to put the image attached in the chat onto the board as a hidden picture layer, and while previewing it can turn on `compare` (the drawing and the reference blended 50/50, so position errors show up as ghosting) and `grid` (a labelled line every 100 pixels). Same Astra Medium on the official desktop app, one run, no image generation: 20 min 57 s, 7 drawing layers and 686 native strokes. The model also generated hair strands and lace with scripts, and checked against the overlay several times while drawing, fixing lettering and lace overlaps.
+
+<table>
+<tr><td><img src="docs/assets/sketch-niang-astra-compare.webp" alt="Astra Medium with overlay checks" width="380"><br><sub><b>Astra Medium</b> · 20 min 57 s · 686 strokes</sub></td><td><img src="docs/assets/sketch-niang-astra-overlay.webp" alt="The overlay preview the model saw" width="260"><br><sub>The overlay the model saw: ghosting on the lettering and hair edges is the error</sub></td></tr>
+</table>
+
+The face shape, hair flow, lace, hand and speech-bubble lettering are all closer to the reference than the two Astra runs above, at about twice the time of the SVG run. This is a single run; other prompts and references may behave differently.
+
+<details>
+<summary>View Images & sketch settings</summary>
+
+<p align="center"><img src="docs/assets/real-creative-en.png" width="564" alt="Images and sketch settings: generation, editing, model choice, and separate canvas and agent controls"></p>
+
+Settings shown directly as cropped screenshots from the actual DSH interface.
+
+</details>
+
+Layers, native curves, brushes, undo/redo, and shortcuts are supported. Save multiple drafts, export PNG or editable drafts, and annotate generated images before continuing an edit.
+
+[Image editing and draft storage →](docs/GUIDE.en.md#image-generation-and-editing-beta)
+
+<a id="codex-subtask-runtime"></a>
+
+## Optional capabilities
+
+Normal subscription chat needs no Codex CLI. For **Codex independent subtasks**, use Install component under Models & runtime; disabling and uninstalling are available in the same place. Other experimental options remain opt-in.
+
+[Optional components, storage cleanup, and the full user guide →](docs/GUIDE.en.md)
+
+## Fork-specific features
+
+The plugin source is strict TypeScript and retains DSH `0.2.1-alpha.1` / Pi `0.87.1` compatibility. Production is not changed by building this worktree.
+
+- **Subscription voice transcription (Experimental):** off by default. The composer microphone reuses Codex OAuth, sends audio to ChatGPT, and supports discard, insert into draft, or explicit transcribe-and-send. Recording remains bound to its original session.
+- **Mobile model picker and per-session speed:** Standard, Fast, and account-advertised Ultrafast are selected in the composer and saved per conversation. Standard has no lightning icon.
+- **Optional Headroom routing:** only an available companion's validated loopback Codex endpoint is used; absence leaves the direct route intact.
+- **PSD:** import/export retains the existing worker and codec alongside PNG and editable sketch drafts.
+- **Recovery:** dsh-robust owns retries when installed; Codex's separate quota-reset wait is disabled to avoid competing recovery loops. Upstream retry-buffer errors are not rewritten.
+- **Account catalog:** refreshed account capabilities are authoritative; the fork keeps bundled fallback metadata before refresh, without granting server-side access.
+- **Sketch previews:** the agent can explicitly request preview, compare and grid between stages; finish does not automatically attach a preview.
 
 ### Optional DSH model guidance
 
 Enable **DSH model guidance** under **Settings → Codex Subscription → Advanced**; off by default. For GPT-6 Astra, Sol, 6.1 Sol and Luna, a locally maintained, DSH-adapted prompt is **appended** to the existing system prompt. It retains the Codex templates' clear communication, independent judgment and sustained authorized work while deferring to DSH identity, tools, permissions, operating mode and file-link conventions. Astra emphasizes complex end-to-end work and technical explanation; Sol favors focused implementations and proportionate checks; Luna is limited by guidance to small, low-risk code changes, prefers existing checks and hands off critical or complex implementation. All models must still honor required verification. This is model guidance, not a technical permission boundary or an automatic model switch.
 
 These are reviewed adaptations of [the Codex templates](https://github.com/openai/codex/blob/8e17909b27875b76b1e9a883a604ed24e969d609/codex-rs/models-manager/models.json) (Apache-2.0), not the original CLI prompt. **Remote catalog instructions are ignored**; catalog updates still refresh model capabilities. Only the exact IDs `gpt-6-astra`, `gpt-6-sol`, `gpt-6.1-sol` and `gpt-6-luna` receive guidance (6.1 Sol shares Sol's prompt), selected on the next assembly after a model change. Other models receive none. The existing `codexBasePrompt` boolean retains its saved value; enabling it now selects this DSH adaptation. Native Codex subtasks manage their own prompt. A DSH preset that enforces a complete prompt can suppress additional sections.
-
-### GPT-6 Astra context
-
-When the official model catalog exposes GPT-6 Astra, Standard preserves the catalog window, Extended uses 872000 tokens, and Custom accepts 128000–872000 tokens (initially 272000). This limit follows the [official Codex model catalog](https://github.com/openai/codex/blob/6af345407d9c2a568da9d01b6c4b81a9e61495c0/codex-rs/models-manager/models.json#L33-L34), not the API model's total context capacity. These settings only adjust DSH's local context budget; they do not grant model access or guarantee an account's server-side capacity. Actual availability remains subject to the service.
-
-### Model picker and live run options
-
-The Codex picker opens a blue, stepped reasoning slider. Click the effort/model caption to open the model list; only Codex subscription models are shown. The lightning button toggles Standard/Fast and the reset button restores the selected model's default effort.
-
-While a Codex session is running, a separate red control offers the same slider and model list. Model, effort and Fast changes require a confirmation dialog and take effect at the next request assembly, without cancelling the current request or tools. Live changes affect this session only, not the global model default. Native Codex child sessions are not editable through this control.
-
-**Settings → Codex Subscription → Account & preferences** has independent **Codex model picker** and **Change options during a run** switches (both on by default). Disabling the picker restores the shipped DSH picker; disabling live options hides the red control and rejects new live-change requests on the Host. Already confirmed selections remain selected.
-
-### Composer quota
-
-<p align="center">
-  <img src="docs/assets/composer-quota.png" width="800" alt="Live DSH composer with GPT-6-Astra, Max reasoning, Fast mode, and remaining quota">
-</p>
-
-Live example: GPT-6-Astra with Max (the highest reasoning level) and Fast mode (lightning icon), with remaining quota visible on the left.
-
-Choose Off, Percent, Progress bar, or Beta Runway under Account & preferences. When a five-hour window exists, the composer shows that window only; the popover retains all windows. A weekly-only display omits the week label and uses compact durations such as `36% · ≈10h–12h`.
-
-Runway uses official observations from the recent two hours, including unchanged readings. Repeated boundary crossings can refine the rate interval when the assumptions hold; insufficient evidence or changing intensity falls back to a conservative estimate. It remains Beta and is not a guarantee of working time. History is bounded and stored locally; resets, long gaps or disabling the feature restart calibration.
-Spark keeps its independent quota. The plugin does not invent five-hour limits, Credits, or spending caps that the service did not return.
-
-### Safe quota reset
-
-If ChatGPT reports available quota resets, Settings shows each one in its own compact row with its disclosed name and expiry.
-You may deliberately try it before a quota reaches 100%, which is useful for a reset nearing expiry. ChatGPT still
-decides whether a window needs resetting and may return **nothing to reset** without spending the reset. The final
-action requires an acknowledgement checkbox and five-second cooldown. Cancel never consumes a reset, rapid repeated
-clicks are single-flight, and an uncertain network result is never retried automatically.
-
-### Image generation and editing (Beta)
-
-A basic viewer derived from `dsh-image-viewer` is now built in, with no extra installation required. Plugin-generated image cards use the built-in viewer to keep annotation and continue-editing actions available. You can zoom, pan, fit, add region notes, and download the image. The standard **Download** action retrieves the permission- and integrity-checked exact original by default; only legacy sessions without an exact original fall back to the conversation preview.
-
-New and edited images return the exact original path on the current DSH host in the tool result, so a model or Agent can read or copy the file. The path is on the host running DSH, not a browser download link; original downloads remain session-authorized. Uninstalling the plugin does not delete generated originals.
-
-**Continue editing in composer** does not send automatically. With annotations, it attaches the clean source and a numbered location-reference image, and includes matching numbers, coordinates, notes, and instructions to exclude the markers from the result. Without annotations, it attaches only the opened image. Every marker needs a note; reference preparation failures stop the handoff. Press **Enter** to save and collapse a region note; use **Shift+Enter** for a new line. Notes remain available when the same image is reopened during the current DSH page session.
-
-A new image request does not silently include earlier images. GPT Image 2 can take longer than a normal text turn, and detailed text, exact composition, or repeated-character consistency may still need another pass.
-
-<p align="center">
-  <img src="docs/assets/image-preview-annotations-en.png" width="800" alt="Generated image, region note, and continue editing inside the DSH Image Viewer">
-</p>
-
-The screenshot above illustrates image viewing and on-image notes; available buttons can vary with the image and installed viewer version.
-
-### Sketch canvas (Beta)
-
-![Sketch canvas in the Chinese UI: aspect ratio, brushes, shapes, layers and zoom](docs/assets/sketch-canvas.png)
-
-Use the composer pen button for manual drawing. Selecting `@sketch` only inserts the Agent entry into the composer; the Agent opens the board after you send your drawing request. You can also choose Open in sketch from an enhanced image preview. Attachment intake and removal use the native DSH component.
-
-Sketch supports local drafts, image layers, aspect ratios, three brushes (solid ink, grainy pencil and translucent highlighter), lines and shapes, two erasers, undo/redo, pan/zoom and configurable shortcuts. Smoothing processes a completed stroke only after release. Up to 20 drafts stay in the current browser; attaching a sketch never sends it automatically. Its image panel manages only the current sketch, not the conversation library.
-
-The board supports editable shapes and text, native curves, and a side control for size/opacity. During Agent drawing, you can view, zoom, close the panel or stop drawing; manual edits unlock when it finishes. Automatic completion previews are off by default and can be enabled in Advanced settings. The document, history and run state are retained when switching away and back. Background drawing while viewing another session is not guaranteed. Save before a full-page reload or exit; unsaved recovery is not guaranteed.
-
-**Sketch-to-image example**: draw, click Attach, describe the desired result in the composer, then send.
-
-| Original sketch | Actual plugin output |
-| --- | --- |
-| ![Mountains and cabin sketch](docs/assets/sketch-demo-source.png) | ![Watercolor mountain cabin generated from the sketch](docs/assets/sketch-demo-result.png) |
-
-The request preserves the mountain and cabin composition while creating a warm watercolor travel illustration with green peaks, an orange roof, a meadow stream and morning light, without the blue outlines. GPT-5.6-Luna made one image-tool call requesting low quality. Luna is the conversation model; the subscription backend determines the actual image model.
-
-<details>
-<summary>Advanced examples</summary>
-
-**Someone Behind the Canvas**
-
-**Astra draws the sketch; GPT Image 2 generates the illustration.** Astra draws 427 strokes across six layers through the native `codex_sketch` interface; Luna then calls the subscription image tool. The request uses `gpt-image-2` at low quality; the server does not report the executing model. This Beta adds PNG export, layered PSD import/export and editable draft files. PSD retains pixel layers; native drafts retain strokes. Sketch canvas and Agent drawing are separate Beta options, both off by default in Advanced settings. Drawing tools are exposed only when Agent drawing is enabled; the agent then automatically opens the current session’s board.
-
-| Native sketch | Generated result |
-| --- | --- |
-| ![Sketch](docs/assets/sketch-advanced-source.png) | ![Result](docs/assets/sketch-advanced-result.png) |
-
-**Sketch reproduction prompt (reconstructed from the artwork, not the original conversation)**
-
-Astra drew the original in stages. This Chinese prompt provides a starting point for the same concept, not a guarantee of an identical result.
-
-```text
-@sketch 用 4:3 横版画板绘制《画布背面有人》：中央偏上是一处撕开的纸洞，洞内是深蓝星空和一位拿颜料桶的小画师；蓝色颜料从桶中流出，形成 S 形河流，流向下方城市。左侧城市保持未上色线稿，右侧城市被暖色点亮，加入纸船与飞鸟。按纸面、洞内世界、颜料河流、城市、画师和细节分层绘制，保留原生可编辑笔画。
-```
-
-**Actual image-generation prompt (original Chinese)**
-
-```text
-请基于本条附加草图实际调用订阅图片工具一次，生成成品插画。quality=low，模型使用当前默认，不切换型号，不额外生成。主题《画布背面有人》：保留4:3横构图、中央偏上的撕纸洞口、洞内拿颜料桶的小画师、流出成为S形河流的蓝色颜料、下方左侧未上色城市与右侧被点亮城市、纸船飞鸟。精修为惊艳的立体纸艺与精细手绘结合的编辑插画，纸张纤维、真实撕边及柔和投影，深靛蓝洞内星月，丰富青蓝颜料层次和流动质感，赭橙画师与暖色建筑，微小清晰的叙事细节。不重构为风景，不添加文字水印。必须使用本条参考图片编辑，不能仅凭文字生成。生成后简短说明完成即可。
-```
-
-Original example released in: [Beta v2.1.0-beta.2](https://github.com/Pascapone/dsh-codex-subscription/releases/tag/v2.1.0-beta.2)
-
-**Mona Lisa: Astra sketch → GPT image generation**
-
-Example version: [2.1.0-beta.5](https://github.com/Pascapone/dsh-codex-subscription/releases/tag/v2.1.0-beta.5)
-
-Actual results supplied by the user from another computer: Astra draws on a portrait canvas, then GPT image generation turns the sketch into an oil painting.
-
-| Native Astra sketch | GPT-generated oil painting |
-| --- | --- |
-| ![Mona Lisa sketch drawn by Astra](docs/assets/sketch-mona-lisa-source.png) | ![Mona Lisa oil painting generated from the sketch](docs/assets/sketch-mona-lisa-result.png) |
-
-Original sketch prompt: `@sketch 用竖版画板画一幅《蒙娜丽莎》` (Draw the Mona Lisa on a portrait canvas.)
-
-Original image prompt: `帮我变成油画` (Turn it into an oil painting.)
-
-</details>
-
-Flare / Sunburst request overrides remain experimental: successful generation does not confirm which image engine or quality the subscription backend used.
-
-### Composer speed
-
-With a supported Codex model selected, open the composer's model menu to choose Standard or Fast. Speed is saved per session; existing sessions start in Standard until you enable Fast in each one.
-Standard adds no icon; only Fast shows a lightning icon before the model name. Spark does not show the speed entry. Fast mode increases speed and uses more Credits;
-see the [OpenAI Codex Speed documentation](https://learn.chatgpt.com/docs/agent-configuration/speed) for the current rules.
-
-### Advanced experiments
-
-Opt in under **Advanced & diagnostics**. SSE and DSH subtasks remain the defaults:
-
-- **WebSocket** reuses connections and eligible context transfers. Failed handshakes can fall back to SSE; interrupted responses surface an error without automatic replay. Applies to the next request, does not expand context limits, and is not guaranteed to be faster.
-- **Codex independent subtasks** reuse your subscription login and the official DSH Codex runtime, without a separate login; install its optional component in settings. They inherit the current subscription model and workspace permissions by default. Enable DSH subtask model selection, configure allowed models and start a new session to specify the child model and reasoning effort in chat. Non-subscription sessions must explicitly select a subscription model. Shared-context subtasks remain with DSH.
-
-<a id="codex-subtask-runtime"></a>
-
-## Optional Codex subtask runtime
-
-Subscription chat, images, and native DSH subtasks do not need Codex CLI. Only **Codex independent subtasks (Beta)** require the optional official runtime. The plugin never downloads it in the background.
-
-In **Settings → Codex → Advanced → Independent subtasks**, click **Install component**. DSH handles installation; the page shows its stage and offers cancellation before applying. Restart after completion, then choose Codex. Installation does not enable subtasks automatically.
-
-![Optional component management](docs/assets/settings-runtime-current-en.png)
-
-Prefer **Install component** above. This `2.2.1` build selects a component matching the current DSH version: DSH `0.1.7-rc.2` installs component `0.1.7-rc.2`, while DSH `0.1.5-rc.2` installs component `0.1.5-rc.2`. An existing `0.1.5-rc.3` component is recognized only on a matching host. Do not omit the component version or substitute `@next`.
-
-<details>
-<summary>Manual installation on older hosts and offline preparation</summary>
-
-Enter a component version matching the current DSH version in the plugin installer. For DSH `0.1.7-rc.2`, enter `@deepseek-ai/dsh-subagent-codex@0.1.7-rc.2`, or run:
-
-```sh
-dsh plugin --profile web add @deepseek-ai/dsh-subagent-codex@0.1.7-rc.2
-```
-
-Use the same profile as the subscription plugin and restart afterwards. Offline preparation requires a complete runtime installed and verified on the target OS and architecture; copying only the subscription plugin or Codex launcher is insufficient. Model requests still need connectivity.
-
-</details>
-
-### When you no longer need it
-
-To disable it, switch back to **DSH** in Advanced settings. The component stays installed so you can enable it again later.
-
-To uninstall it, click **Uninstall component** in the same section and confirm. The plugin blocks removal while Codex subtasks are running, switches back to DSH, and uses the official uninstall interface. Restart after completion. On older hosts, run this in a terminal, replacing `web` with the profile where you installed it:
-
-```sh
-dsh plugin --profile web remove @deepseek-ai/dsh-subagent-codex
-```
-
-This removes the optional subtask component, not the subscription plugin. Subscription chat, image generation and native DSH subtasks are unaffected. The package manager may keep the component if another plugin still depends on it.
-
-### Storage and cleanup
-
-Uninstalling does not clear shared package caches or guarantee a fixed amount of reclaimed space. DSH or Portable manages those caches centrally; this plugin does not delete shared directories. Sketches, conversation history, generated originals and sign-in data are not package caches. Use their respective management controls when you want to remove them.
 
 ## Update and uninstall
 
@@ -323,10 +297,54 @@ dsh plugin --profile web remove @pascapone/dsh-codex-subscription
 
 ## Troubleshooting
 
-- **`dsh` is not recognized:** install from the DSH Plugins page; no terminal setup is needed.
-- **More than one DSH exists:** run the standard command from the intended DSH environment so that product selects the corresponding profile;
-- **Setup still fails:** confirm the command is running in the intended DSH environment. Do not delete the profile or change the system PATH to force an install.
-- **Need to report a problem:** generate a **Support diagnostics** report at the bottom of Settings, then open the [bug report form](https://github.com/Pascapone/dsh-codex-subscription/issues/new?template=install-problem.yml). The report includes the OS/runtime, bounded sign-in phase, and safe request-failure categories, but excludes credentials, account identifiers, raw responses, and full logs. Paste it into the required diagnostics field; never attach sign-in URLs, authorization codes, or browser callback addresses.
+<details>
+<summary>DSH 0.2.0-rc.2 reports the plugin as incompatible?</summary>
+
+DSH 0.2.0-rc.2 did not exist when any release before 2.2.10 was published, and a published package's compatibility declaration cannot be changed. Install 2.2.10 or later (a bare package name can resolve to an older release during the first 24 hours, so enter `@pascapone/dsh-codex-subscription@2.2.10`) from the **Plugins** page, or run `dsh plugin --profile web update @pascapone/dsh-codex-subscription`, then restart DSH.
+
+</details>
+
+<details>
+<summary>No dsh command on your computer?</summary>
+
+Use **Plugins → Add plugin** in DSH and paste the package name. No terminal setup is needed.
+
+</details>
+
+<details>
+<summary>Multiple DSH installations, or a missing plugin?</summary>
+
+Install from the DSH you actually use. For terminal installation, run commands in the intended DSH environment and check its profile. Do not delete profiles or change your system PATH to force an install.
+
+</details>
+
+<details>
+<summary>How do I report a problem?</summary>
+
+Generate **Support diagnostics** under **Settings → Codex → Maintenance**, paste it into the [bug report form](https://github.com/Pascapone/dsh-codex-subscription/issues/new?template=install-problem.yml), and include the steps that caused the problem.
+
+Diagnostics exclude credentials, account identifiers, raw responses, and full logs. Never attach sign-in URLs, authorization codes, or browser callback addresses.
+
+</details>
+
+## Current icon
+
+The current plugin icon and its appearance in DSH’s Installed list.
+
+<p align="center"><img src="icon-subscription.webp" width="200" height="200" alt="Current Codex Subscription plugin icon"></p>
+
+<p align="center"><img src="docs/assets/plugin-installed-en.png" width="800" alt="Codex Subscription plugin card in the DSH Installed list"></p>
+
+<sub>Captured in DSH 0.1.7-alpha.2.</sub>
+
+## Positioning and boundaries
+
+- **ChatGPT / Codex subscription only**, done in depth: quota and forecasting, images and sketches, subtasks, diagnostics. Other subscriptions such as Claude or Grok are out of scope.
+- **Fail explicitly**: requests never silently fall back to another paid route, and quota windows the account does not return are never invented.
+- **Compatibility:** upstream acceptance records describe the stable releases; this fork additionally targets DSH `0.2.1-alpha.1`. Local automated checks are not an account or visual acceptance test.
+- Models, quota and features depend on what your account actually returns; the ChatGPT backend and DSH can change independently.
+
+## Scope and support
 
 The ChatGPT Codex backend and DSH can change independently. This community project is not affiliated with or endorsed by DeepSeek or OpenAI.
 
@@ -339,3 +357,17 @@ Read [SECURITY.md](SECURITY.md) before reporting sensitive issues.
 If this project is useful, the [Star button](https://github.com/Pascapone/dsh-codex-subscription/stargazers) helps more DSH users find it.
 
 [简体中文](README.md) · [MIT](LICENSE)
+
+## Fork controls and context defaults
+
+Fresh DSH Multi-Agent delegations support `speed_mode: "standard" | "fast"` (Standard by default). Speed is saved for the child before its first request, does not change the parent's speed, and survives resume. Unsupported Fast models are rejected; failed child starts remove the prepared preference. Both updated plugins are required for Fast delegation.
+
+### GPT-6 Sol / Luna
+
+GPT-6.1 Sol, GPT-6 Sol and GPT-6 Luna are listed in [Codex's model catalog](https://github.com/openai/codex/blob/1983c48fd1/codex-rs/models-manager/models.json). The plugin reads available models and reasoning levels from the current account's Codex catalog. It also bundles 6.1 Sol, Sol and Luna as offline fallbacks for hosts whose installed pi-ai catalog predates these models; a successfully refreshed account catalog remains authoritative for availability and capabilities. GPT-6.1 Sol defaults to 500000 tokens following [OpenAI's announcement](https://x.com/thsottiaux/status/2109430343346581527), including when the installed or account catalog still reports 272000. An explicit lower account maximum is respected; the existing offline extended limit remains 872000, with Fast support. Other models keep their current defaults. Selecting a fallback does not grant server-side model access.
+
+### Per-model context limits
+
+Open **Settings → Codex → Advanced → Context window → Configure token limits per model** to switch to Custom and edit full token counts. Existing values seed the inputs, except GPT-6.1 Sol starts at 500000. Values save on blur or Enter and persist across mode changes and catalog refreshes; existing custom values are not replaced by an upgrade. Standard restores model defaults; Extended uses each model's maximum. These are local DSH context budgets, not server-side capacity upgrades, and custom values remain bounded by the model maximum.
+
+The Codex picker keeps the compact reasoning slider and confirmed run options for changes during an active session. Model visibility, the new-conversation default model, and catalog-supported Ultrafast are available alongside these controls. Confirmed active-run changes currently support Standard and Fast. The microphone yields its activity slot to another voice plugin.

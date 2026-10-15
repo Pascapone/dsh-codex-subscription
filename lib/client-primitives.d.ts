@@ -10,6 +10,7 @@ export declare const Button: import("react").ForwardRefExoticComponent<{
     className?: string | undefined;
     children?: import("react").ReactNode;
 } & import("react").ButtonHTMLAttributes<HTMLButtonElement> & import("react").RefAttributes<HTMLButtonElement>>;
+export declare const Switch: typeof primitives.Switch;
 export declare const useAnchoredPosition: typeof primitives.useAnchoredPosition;
 export declare const useDismissOnOutsidePointer: typeof primitives.useDismissOnOutsidePointer;
 export declare const IconCheckOutline16: (props: primitives.IconProps) => import("react").JSX.Element;

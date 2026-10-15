@@ -1,8 +1,11 @@
+import type { SketchCommandReport } from './sketch-types.js';
+
 import type { SketchDocument, SketchStroke, SketchCommand, SketchRequest, SketchCommandAdapter, SketchCommandResult } from './sketch-types.js';
 import { identifyObjects, transformObject } from './sketch-objects.js'
 import { expandSketchPreset } from './sketch-presets.js'
 import { MAX_SKETCH_STROKES, MAX_STROKE_POINTS } from './sketch-document.js'
 import { changeSketchLayer, strokeCount, resizeSketch } from './sketch-layers.js'
+import { expandSvgCommands, MAX_SVG_CHARACTERS } from './sketch-svg.js'
 
 export const MAX_SKETCH_POINTS = 200_000
 export const SKETCH_COMMAND_HELP = {
@@ -15,14 +18,16 @@ export const SKETCH_COMMAND_HELP = {
     curve: 'Prefer {op:"stroke",shape:"bezier",start:{x:0,y:0},segments:[{control1:{x:0.2,y:0},control2:{x:0.8,y:1},end:{x:1,y:1}}],color:"#123456"}. Each segment has exactly two controls and an endpoint; no point counting required. Legacy points arrays still accepted. Do not provide both forms.',
     object: '{op:"object",layer:1,id:"title",action:"update|duplicate|delete",patch:{color:"#0088ff",text:"Title"},transform:{dx:0.05,dy:0,scaleX:1,scaleY:1}}. All patch and transform fields optional. Inspect returns object IDs and bounds. Prefer targeted edits over redrawing layers.',
     resize: '{op:"resize",ratio:"1:1|4:3|3:4|16:9|9:16"}',
+    svg: '{op:"svg",svg:"<svg viewBox=\\"0 0 1024 768\\">...</svg>",layer:1}. Fastest way to draw: send a whole scene as SVG (path with M L H V C S Q T A Z, rect, circle, ellipse, line, polyline, polygon, g, use, transform, fill/stroke/opacity, style="..."); it becomes native editable strokes. The viewBox must match the canvas size (use the width and height from inspect; 4:3 is 1024x768). Gradients are flattened to their average color, so build glows and skies from stacked bands; text, image, filter, clipPath, mask, pattern and CSS classes are refused. Coordinates outside the canvas are clamped. One svg command may hold up to ' + MAX_SVG_CHARACTERS + ' characters.',
   },
-  limits: { strokes: MAX_SKETCH_STROKES, pointsPerStroke: MAX_STROKE_POINTS, pointsTotal: MAX_SKETCH_POINTS, commandsPerBatch: 256 },
+  limits: { strokes: MAX_SKETCH_STROKES, pointsPerStroke: MAX_STROKE_POINTS, pointsTotal: MAX_SKETCH_POINTS, commandsPerBatch: 256, svgCharacters: MAX_SVG_CHARACTERS },
 }
 const finite = (value: unknown, min: number, max: number) => typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
-export function applySketchCommands(source: SketchDocument, commands: unknown): SketchDocument {
+export function applySketchCommands(source: SketchDocument, commands: unknown, report?: SketchCommandReport) {
   if (!Array.isArray(commands) || !commands.length || commands.length > 256) throw Error('Expected 1–256 commands')
   let doc = identifyObjects(source)
-  for (let command of commands as SketchCommand[]) {
+  const expanded = expandSvgCommands(commands as SketchCommand[], doc, report)
+  for (let command of expanded) {
     if (!command || typeof command !== 'object') throw Error('Invalid command')
     if (command.op === 'stroke') command = expandSketchPreset(command)
     if (command.op === 'resize') { doc = resizeSketch(doc, command.ratio!); continue }
@@ -68,7 +73,7 @@ export function applySketchCommands(source: SketchDocument, commands: unknown): 
       !Array.isArray(points) || !points.length || points.length > MAX_STROKE_POINTS ||
       points.some(p => !p || !finite(p.x,0,1) || !finite(p.y,0,1))) throw Error('Invalid stroke')
     if ((['line','arrow','text','rectangle','circle'].includes(shape) && points.length !== 2) || (shape === 'polygon' && points.length < 3)) throw Error('Invalid shape points')
-    if (shape==='bezier' && (points.length<4 || points.length>193 || (points.length-1)%3!==0)) throw Error(`commands[${commands.indexOf(command)}]: Bezier has ${points.length} points; expected 4, 7, 10, ... 193 (start + control1/control2/end per segment). No commands in this batch were applied.`)
+    if (shape==='bezier' && (points.length<4 || points.length>193 || (points.length-1)%3!==0)) throw Error(`commands[${expanded.indexOf(command)}]: Bezier has ${points.length} points; expected 4, 7, 10, ... 193 (start + control1/control2/end per segment). No commands in this batch were applied.`)
     if (fill && !['rectangle','circle','polygon','bezier'].includes(shape)) throw Error('Fill requires a closed shape')
     const layer = doc.layers.find(layer => layer.id === (command.layer ?? doc.active))
     if (!layer?.visible) throw Error('Target layer is missing or hidden')
@@ -78,7 +83,9 @@ export function applySketchCommands(source: SketchDocument, commands: unknown): 
     const stroke: SketchStroke = { id, ...(shape==='text'?{text:command.text}:{}), shape, color: color!, width, opacity, fill, brush:'pen', points:points.map(p=>({x:p.x,y:p.y})) }
     doc = {...doc,layers:doc.layers.map(item=>item===layer?{...item,strokes:[...item.strokes,stroke]}:item)}
   }
-  if (strokeCount(doc) > MAX_SKETCH_STROKES || doc.layers.reduce((n,l)=>n+l.strokes.reduce((m,s)=>m+s.points.length,0),0) > MAX_SKETCH_POINTS) throw Error('Sketch resource budget exceeded')
+  const strokes = strokeCount(doc), points = doc.layers.reduce((n,l)=>n+l.strokes.reduce((m,s)=>m+s.points.length,0),0)
+  if (strokes > MAX_SKETCH_STROKES) throw Error(`Sketch would hold ${strokes} strokes; the limit is ${MAX_SKETCH_STROKES}. Merge shapes or drop small details, then send this batch again`)
+  if (points > MAX_SKETCH_POINTS) throw Error(`Sketch would hold ${points} points; the limit is ${MAX_SKETCH_POINTS}. Use fewer or simpler paths, then send this batch again`)
   return doc
 }
 
@@ -100,27 +107,34 @@ export function createSketchCommandSession(adapter: SketchCommandAdapter) {
     }
     if (request.documentId !== current.documentId) throw Error('Document changed; inspect again')
     if (pending || adapter.busy()) throw Error('Sketch is being edited; retry after it settles')
-    if (request.action === 'preview') return {...current, png:await adapter.preview()}
-    if (!['apply','save'].includes(request.action!)) throw Error('Unknown sketch action')
+    if (request.action === 'preview') {
+      for (const key of ['compare','grid'] as const) if (request[key] !== undefined && typeof request[key] !== 'boolean') throw Error(`${key} must be true or false`)
+      return {...current, png:await adapter.preview({compare:request.compare===true,grid:request.grid===true}), ...(request.grid?{gridStep:100}:{})}
+    }
+    if (!['apply','save','reference'].includes(request.action!)) throw Error('Unknown sketch action')
     if (typeof request.requestId !== 'string' || !request.requestId.length || request.requestId.length > 100) throw Error('A unique requestId is required')
     const key = `${current.documentId}:${request.requestId}`, fingerprint = JSON.stringify({...request,runId:undefined})
     const cached = completed.get(key)
     if (cached) { if(cached.fingerprint!==fingerprint)throw Error('requestId reused with different content');return cached.result }
     if (request.revision !== current.revision || adapter.busy()) throw Error('Sketch changed or is being edited; inspect again')
     let changedObjects: { layer: number; id?: string }[] | undefined
+    const report: SketchCommandReport={}
     if (request.action === 'apply') {
       const before=adapter.document()
       let next: SketchDocument
-      try { next=applySketchCommands(before,request.commands) }
-      catch(cause) { const error: Error & { code?: string }=new Error(`${(cause as Error).message} Correct the batch and retry with the same runId and revision; nothing was applied.`,{cause});error.code='SKETCH_INVALID_BATCH';throw error }
+      try { next=applySketchCommands(before,request.commands,report) }
+      catch(cause) { const error: Error & { code?: string }=new Error(`${cause instanceof Error ? cause.message : 'Invalid sketch batch'} Correct the batch and retry with the same runId and revision; nothing was applied.`,{cause});error.code='SKETCH_INVALID_BATCH';throw error }
       adapter.commit(next)
       const previous=new Map(before.layers.flatMap(l=>l.strokes.map(s=>[`${l.id}:${s.id}`,s])))
       changedObjects=next.layers.flatMap(l=>l.strokes.filter(s=>previous.get(`${l.id}:${s.id}`)!==s).map(s=>({layer:l.id,id:s.id})))
+    } else if (request.action === 'reference') {
+      if (typeof request.image !== 'string' || !/^data:image\/(png|jpeg|webp);base64,/.test(request.image) || request.image.length > 1_900_000) throw Error('A PNG, JPEG or WebP reference image is required')
+      pending=true;try{await adapter.addReference!(request.image,typeof request.name==='string'?request.name.slice(0,40):'reference')}finally{pending=false}
     } else {
       if(request.name!==undefined && (typeof request.name!=='string'||request.name.length>60))throw Error('Invalid draft name')
       pending=true;try{await adapter.save(request.name)}finally{pending=false}
     }
-    const result = {...adapter.snapshot(),...(changedObjects?{changedObjects:changedObjects.slice(0,100),changedObjectCount:changedObjects.length}:{})}
+    const result = {...adapter.snapshot(),...(changedObjects?{changedObjects:changedObjects.slice(0,100),changedObjectCount:changedObjects.length}:{}),...(report?.warnings?.length?{warnings:report.warnings}:{}),...(report?.clampedPoints?{clampedPoints:report.clampedPoints}:{})}
     completed.set(key,{fingerprint,result,receipt:{requestId:request.requestId,action:request.action!,revision:result.revision}})
     cachedCharacters+=fingerprint.length
     while(completed.size>1 && (completed.size>128 || cachedCharacters>4_000_000)){

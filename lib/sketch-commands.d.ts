@@ -1,3 +1,4 @@
+import type { SketchCommandReport } from './sketch-types.js';
 import type { SketchDocument, SketchRequest, SketchCommandAdapter, SketchCommandResult } from './sketch-types.js';
 export declare const MAX_SKETCH_POINTS = 200000;
 export declare const SKETCH_COMMAND_HELP: {
@@ -10,13 +11,15 @@ export declare const SKETCH_COMMAND_HELP: {
         curve: string;
         object: string;
         resize: string;
+        svg: string;
     };
     limits: {
         strokes: number;
         pointsPerStroke: number;
         pointsTotal: number;
         commandsPerBatch: number;
+        svgCharacters: number;
     };
 };
-export declare function applySketchCommands(source: SketchDocument, commands: unknown): SketchDocument;
+export declare function applySketchCommands(source: SketchDocument, commands: unknown, report?: SketchCommandReport): SketchDocument;
 export declare function createSketchCommandSession(adapter: SketchCommandAdapter): (request: SketchRequest) => Promise<SketchCommandResult>;

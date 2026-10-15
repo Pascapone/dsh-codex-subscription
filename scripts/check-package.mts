@@ -29,9 +29,33 @@ try {
   });
   assert.equal(client.id, name);
   assert.equal(typeof client.factory, 'function');
-  const worker: {onmessage?: unknown; postMessage(): void} = { postMessage() {} };
-  runInNewContext(readFileSync(join(pkg, 'lib/sketch-psd-worker.js'), 'utf8'), { self: worker });
+  class CodecImageData {
+    data: Uint8ClampedArray; width: number; height: number;
+    constructor(width: number, height: number) { this.width = width; this.height = height; this.data = new Uint8ClampedArray(width * height * 4); }
+  }
+  let reply: {ok?: boolean; value?: unknown; error?: string} = {};
+  const worker: {onmessage?: (event: {data: {action: string; payload: unknown}}) => void; postMessage(value: typeof reply): void} = {
+    postMessage(value) { reply = value; },
+  };
+  runInNewContext(readFileSync(join(pkg, 'lib/sketch-psd-worker.js'), 'utf8'), { self: worker, ImageData: CodecImageData,
+    OffscreenCanvas: class { getContext() { return {createImageData: (width: number, height: number) => new CodecImageData(width, height)}; } },
+  });
   assert.equal(typeof worker.onmessage, 'function');
+  const sample = Buffer.alloc(43);
+  sample.write('8BPS'); sample.writeUInt16BE(1, 4); sample.writeUInt16BE(3, 12);
+  sample.writeUInt32BE(1, 14); sample.writeUInt32BE(1, 18); sample.writeUInt16BE(8, 22); sample.writeUInt16BE(3, 24); sample[40] = 255;
+  worker.onmessage!({data: {action: 'read', payload: sample.buffer.slice(sample.byteOffset, sample.byteOffset + sample.byteLength)}});
+  assert.equal(reply.ok, true, reply.error);
+  const raster = reply.value as {width: number; height: number; layers: {name: string; imageData: CodecImageData}[]};
+  assert.equal(raster.width, 1);
+  assert.deepEqual(Array.from(raster.layers[0].imageData.data), [255, 0, 0, 255]);
+  worker.onmessage!({data: {action: 'write', payload: {width: 1, height: 1, imageData: raster.layers[0].imageData,
+    children: raster.layers.map(layer => ({name: layer.name, imageData: layer.imageData}))}}});
+  assert.equal(reply.ok, true, reply.error);
+  const encoded = reply.value;
+  worker.onmessage!({data: {action: 'read', payload: encoded}});
+  assert.equal(reply.ok, true, reply.error);
+  assert.deepEqual(Array.from((reply.value as typeof raster).layers[0].imageData.data), [255, 0, 0, 255]);
   assert.ok(readFileSync(join(pkg, 'icon-subscription.webp')).length > 0);
   for (const [graph, entry] of [['host', name], ['client', `${name}/client`]] as const) {
     const source = join(root, `${graph}.mts`);
@@ -43,7 +67,12 @@ try {
       getCurrentDirectory: () => root, getCanonicalFileName: file => file, getNewLine: () => '\n',
     }));
   }
-  console.log('Packed Host import, classic Client registration, PSD Worker, icon and separate strict declaration consumers passed.');
+  const hostTests = spawnSync(process.execPath, ['--test', '.test-build/tests/plugin-integration.test.mjs'], {
+    stdio: 'inherit', env: {...process.env, CODEX_PACKAGE_ENTRY: join(pkg, 'lib/index.js')},
+  });
+  if (hostTests.error) throw hostTests.error;
+  assert.equal(hostTests.status, 0, 'Packed Host apply/RPC/disposal integration failed');
+  console.log('Packed Host apply/RPC/disposal, classic Client registration, PSD read/write roundtrip, icon and strict declaration consumers passed (dependency declarations skipped).');
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

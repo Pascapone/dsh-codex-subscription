@@ -25,7 +25,7 @@ function fixture({enabled=true,complete=true,reason='stop',block={type:'text',te
   yield {type:'block-end',index:0,block}
   yield {type:'finish',reason:{kind:reason},replayState:native}
  },async prepareCall(){return {stream:(o: FixtureOptions)=>this.stream(o)}}}
- bridge=createCompactionBridge({enabled:()=>enabled,accountScope:async o=>(o as typeof o & {account?: string}).account??'a',threshold:()=>4000})
+ bridge=createCompactionBridge({enabled:()=>enabled,accountScope:async o=>({access:'synthetic-token',accountId:(o as typeof o & {account?: string}).account??'a'}),threshold:()=>4000})
  return {bridge,adapter:bridge.wrapAdapter(adapter as unknown as Parameters<CompactionBridge['wrapAdapter']>[0]) as unknown as FixtureAdapter,wires,setEnabled:(value: boolean)=>{enabled=value}}
 }
 async function run(adapter: Pick<FixtureAdapter, 'stream'>,messages: FixtureMessage[],extra: Partial<FixtureOptions>={}){const events: unknown[]=[];for await(const e of adapter.stream({provider:'openai-codex',model:'gpt-5.6-luna',messages,...extra}))events.push(e);return events.at(-1) as FixtureFinish}
@@ -34,6 +34,7 @@ test('checkpoint captured without content-type and restored after JSON roundtrip
  const f=fixture();const first=await run(f.adapter,[user('history')]);assert.ok(first.replayState.response.codexCompactionV1)
  await run(f.adapter,[user('history'),message(first),user('next')]);assert.equal(f.wires[1].input[0].type,'compaction');assert.equal(f.wires[1].input.length,2)
  assert.deepEqual(first.replayState.blocks,native.blocks)
+ assert.deepEqual(f.bridge.snapshot(), { requests: 2, checkpointsSaved: 2, checkpointsReused: 1 })
 })
 test('cloud compaction captures its SSE checkpoint through the trusted Headroom endpoint',async()=>{
  const f=fixture({headroomBaseUrl:'http://127.0.0.1:18781/backend-api'})

@@ -5,6 +5,7 @@ export declare function createSubscriptionConnection({ resolveMode, resolveProxy
     resolveMode?: () => 'sse' | 'websocket';
     resolveProxy?: typeof resolveCodexOAuthProxy;
 }): {
+    snapshot(): Record<string, number>;
     prepare(options?: StreamOptions, baseUrl?: string): Promise<{
         options: StreamOptions & {
             websocketConnectTimeoutMs?: number;

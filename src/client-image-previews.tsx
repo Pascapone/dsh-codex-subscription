@@ -1,3 +1,4 @@
+
 import type { ComponentType } from 'react';
 import type { ComposerAttachmentsProps, ComposerImageAttachment, MessageImagesOwnerProps, MessageImageSource } from '@deepseek-ai/dsh-client-ui-conversation/client';
 import type { StoredEntry } from '@deepseek-ai/dsh-client-ui-slots';
@@ -8,18 +9,21 @@ type ComposerPreviewProps = Omit<ComposerAttachmentsProps, 't'> & PreviewProps &
 type MessageImageView = { attachment?: Extract<MessageImageSource, { attachment: unknown }>['attachment']; preview?: Extract<MessageImageSource, { preview: unknown }>['preview']; label?: string };
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { buildImageEditDraft } from './image-edit.js'
+import { officialImageTools } from './image-official-tools.js'
 
 function openPreview(props: PreviewProps, item: Pick<ViewerItem, 'name'> & Partial<ViewerItem>, opener: HTMLElement | null | undefined, sourceInDraft = false) {
   const { service, preference, t, attachForEdit } = props
   const settings = preference.getSnapshot()
+  const src = item.src, openSketchImage = props.openSketchImage
+  if (!src) return
   const referenceName = `annotated-${item.name}.png`
   service.open({ items: [{ ...item, actions: settings.imageEditing ? [{
     id: 'edit', label: t('imageEdit'), pendingLabel: t('imageEditPreparing'),
     errorLabel: t('imageEditFailed'), closeOnSuccess: true,
-    onInvoke: ({ annotations }: ViewerActionContext) => attachForEdit(item.src!, item.name,
+    onInvoke: ({ annotations }: ViewerActionContext) => attachForEdit(src, item.name,
       buildImageEditDraft({ annotations, translate: t, sourceName: item.name, referenceName }),
       annotations, referenceName, sourceInDraft),
-  }, ...(settings.imageSketch && props.openSketchImage ? [{id:'sketch',label:t('imageToSketch'),pendingLabel:t('imageEditPreparing'),errorLabel:t('imageEditFailed'),onInvoke:()=>props.openSketchImage!(item.src!,item.name)}] : [])] : [] }], opener, source: sourceInDraft ? 'codex-draft' : 'codex-message',
+  }, ...officialImageTools({ src, name: item.name, t, attachForEdit, sourceInDraft }), ...(settings.imageSketch && openSketchImage ? [{id:'sketch',label:t('imageToSketch'),pendingLabel:t('imageEditPreparing'),errorLabel:t('imageEditFailed'),onInvoke:()=>openSketchImage(src,item.name)}] : [])] : [] }], opener, source: sourceInDraft ? 'codex-draft' : 'codex-message',
   annotations: settings.imageAnnotations })
 }
 

@@ -1,3 +1,4 @@
+
 import type { Context, Fiber } from '@deepseek-ai/cordis';
 import type { SubagentProvider, SubagentRun, SubagentStartRequest } from '@deepseek-ai/dsh-subagent';
 import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy';
@@ -38,9 +39,18 @@ export function subagentThreadPolicy(parent: ThreadParent, policy: Pick<ReturnTy
     modelProvider: 'openai',
     approvalPolicy: 'never',
     sandbox: policy!.mode,
-    config: effort === undefined ? {} : { model_reasoning_effort: effort },
+    config: { ...CHILD_FEATURES_OFF, ...(effort === undefined ? {} : { model_reasoning_effort: effort }) },
   }
 }
+
+/**
+ * A ChatGPT-authenticated Codex child would otherwise expose the account's
+ * connected apps (calendar, site deploys, ...) and plugin installs, all
+ * auto-approved. A DSH subtask gets the workspace tools only.
+ */
+const CHILD_FEATURES_OFF = Object.freeze({
+  features: Object.freeze(Object.fromEntries(['apps', 'plugins', 'plugin_sharing', 'remote_plugin', 'tool_suggest', 'browser_use', 'browser_use_external', 'browser_use_full_cdp_access', 'computer_use', 'in_app_browser'].map(name => [name, false]))),
+})
 
 /** Reuse the official DSH process/turn provider; keep only subscription auth here. */
 export function createSubscriptionSubagent({ ctx, nativeHome, resolveAuth, store, refresh, loadRuntime, maintenance = () => false }: SubscriptionSubagentOptions) {
@@ -94,6 +104,19 @@ export function createSubscriptionSubagent({ ctx, nativeHome, resolveAuth, store
   }
 }
 
+/**
+ * DSH 0.2 mounts Agent preset rows once, at boot and before plugins load, so the
+ * Loader never lists them and `internal/config` never reaches a later listener.
+ * Read them from the preset registry; a host without it simply has none.
+ */
+export function presetEntries(ctx: Pick<Context, 'get'>) {
+  try {
+    const generations = (ctx.get?.('agentPresets') as unknown as { generations?: Map<unknown, { mount?: { tree?: { entries(): Iterable<SwitchEntry> } } }> } | undefined)?.generations
+    if (!(generations instanceof Map)) return []
+    return [...generations.values()].flatMap(generation => [...(generation.mount?.tree?.entries?.() ?? [])])
+  } catch { return [] }
+}
+
 /** Change only standard independent spawn tools; leave fork/custom tools untouched. */
 export function createSubagentBackendSwitcher({ entries, prepare, persist }: SwitcherOptions) {
   const originals = new Map<SwitchFiber, ToolConfig>()
@@ -102,7 +125,17 @@ export function createSubagentBackendSwitcher({ entries, prepare, persist }: Swi
   let disposed = false
   const standard = (entry: SwitchEntry | null | undefined, config: ToolConfig | null | undefined) => entry?.options?.name === '@deepseek-ai/dsh-tool-subagent'
     && config?.provider === 'spawn' && !config.agentOptions && !config.persona && !config.toolFilter
-  const convert = (config: ToolConfig) => ({ ...config, provider: SUBAGENT_PROVIDER, modelSelectionSettings: true, backgroundMode: 'one-shot', maxDepth: 'provider-managed' })
+  const convert = (config: ToolConfig): ToolConfig => ({ ...config, provider: SUBAGENT_PROVIDER, modelSelectionSettings: true, backgroundMode: 'one-shot', maxDepth: 'provider-managed' })
+  const ownedFields = ['provider', 'modelSelectionSettings', 'backgroundMode', 'maxDepth']
+  const restore = (current: ToolConfig, original: ToolConfig) => {
+    const result = { ...current }, applied = convert(original)
+    for (const key of ownedFields) {
+      if (current[key] !== applied[key]) continue
+      if (Object.hasOwn(original, key)) result[key] = original[key]
+      else delete result[key]
+    }
+    return result
+  }
   const configure = (fiber: SwitchFiber, config: ToolConfig) => {
     if (!standard(fiber.entry, config)) return config
     if (!originals.has(fiber)) originals.set(fiber, { ...config })
@@ -128,7 +161,8 @@ export function createSubagentBackendSwitcher({ entries, prepare, persist }: Swi
           if (fiber.entry && fiber.entry.fiber !== fiber) { originals.delete(fiber); continue }
           const before = { ...fiber.config }
           changed.push({ fiber, before })
-          await fiber.update(mode === 'codex' ? convert(original) : original, true)
+          if (mode === 'codex' && before.provider !== SUBAGENT_PROVIDER) originals.set(fiber, { ...before })
+          await fiber.update(mode === 'codex' ? convert(before) : restore(before, original), true)
         }
         await persist?.(mode)
       } catch (error) {
@@ -148,7 +182,7 @@ export function createSubagentBackendSwitcher({ entries, prepare, persist }: Swi
       disposed = true
       selected = 'dsh'
       for (const [fiber, original] of originals) {
-        if (fiber.config?.provider === SUBAGENT_PROVIDER) await fiber.update(original, true)
+        if (fiber.config?.provider === SUBAGENT_PROVIDER) await fiber.update(restore(fiber.config, original), true)
       }
       originals.clear()
     },

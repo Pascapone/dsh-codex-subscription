@@ -1,3 +1,4 @@
+
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { capabilityPatch, readCapabilitySettings, quotaWarning } from '../src/capability-settings.js'
@@ -68,9 +69,9 @@ test('search settings control the request and filter domains without suffix conf
   const provider = createCodexSearchProvider(({
     resolvePreferences: () => preferences,
     async getAuth() { authCalls++; return { auth: { apiKey: 'fixture' } } },
-    async readCredential() { return { type: 'oauth', accountId: 'fixture' } },
-    async fetch(url: Parameters<typeof fetch>[0], init: Parameters<typeof fetch>[1]) { bodies.push(JSON.parse(init!.body as string) as {settings: {external_web_access: boolean}}); return Response.json({ results: ['example.com', 'docs.example.com', 'evilexample.com', 'example.com.evil.org'].map(host => ({ url: `https://${host}/`, title: host })) }) },
-  } as unknown as Parameters<typeof createCodexSearchProvider>[0]))
+    async readCredential() { return { type: 'oauth', access: 'fixture', accountId: 'fixture' } },
+    async fetch(url: Parameters<typeof fetch>[0], init: Parameters<typeof fetch>[1]) { bodies.push(JSON.parse(init!.body as string)); return Response.json({ results: ['example.com', 'docs.example.com', 'evilexample.com', 'example.com.evil.org'].map(host => ({ url: `https://${host}/`, title: host })) }) },
+  }) as unknown as Parameters<typeof createCodexSearchProvider>[0])
   await assert.rejects(provider.search({ query: 'query' }), /disabled/)
   assert.equal(authCalls, 0)
   preferences = { searchMode: 'cached', searchDomains: ['example.com'] }

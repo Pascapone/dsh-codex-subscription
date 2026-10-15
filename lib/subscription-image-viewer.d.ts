@@ -15,6 +15,8 @@ export type ViewerActionContext = {
     item: ViewerItem;
     src: string;
     annotations: ViewerAnnotation[];
+    mask?: Blob;
+    option?: string;
 };
 export type ViewerDownload = {
     pendingLabel?: string;
@@ -24,6 +26,11 @@ export type ViewerDownload = {
 export type ViewerAction = Omit<ViewerDownload, 'onInvoke'> & {
     id: string;
     label: string;
+    kind?: 'edit' | 'tool' | 'mask' | 'choice';
+    options?: {
+        value: string;
+        label: string;
+    }[];
     pendingLabel: string;
     errorLabel: string;
     closeOnSuccess: boolean;

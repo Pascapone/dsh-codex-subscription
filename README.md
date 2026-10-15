@@ -1,13 +1,14 @@
-# DSH Codex Subscription — 在 DeepSeek Harness 使用 ChatGPT 订阅
+<p align="center"><img src="icon-subscription.webp" width="128" height="128" alt="DSH Codex Subscription 图标"></p>
 
 <div align="center">
+
+# DSH Codex Subscription
 
 **简体中文** · [English](https://github.com/Pascapone/dsh-codex-subscription/blob/main/README.en.md)
 
 **把 ChatGPT / Codex 订阅直接接入 DeepSeek Harness**
 
-在 DeepSeek Harness 中直接登录 ChatGPT 并使用 Codex 订阅。无需 OpenAI API Key，也不依赖 Codex CLI；
-模型、搜索、额度和图片生成都留在 DSH 里。
+用 ChatGPT Plus / Pro 订阅登录，即可在 DSH 中使用 GPT-6 等 Codex 模型、查额度、联网搜索和生图。无需 OpenAI API Key，也不依赖 Codex CLI。
 
 [![CI](https://github.com/Pascapone/dsh-codex-subscription/actions/workflows/ci.yml/badge.svg)](https://github.com/Pascapone/dsh-codex-subscription/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@pascapone/dsh-codex-subscription?logo=npm&label=npm)](https://www.npmjs.com/package/@pascapone/dsh-codex-subscription)
@@ -15,57 +16,85 @@
 [![MIT](https://img.shields.io/badge/license-MIT-111111.svg)](LICENSE)
 [![Star](https://img.shields.io/github/stars/Pascapone/dsh-codex-subscription?style=flat&logo=github&label=Star)](https://github.com/Pascapone/dsh-codex-subscription/stargazers)
 
-[三步开始](#三步开始) · [安装](#安装) · [参与贡献](CONTRIBUTING.md) · [更新与卸载](#更新与卸载)
+[功能](#功能一览) · [安装](#安装) · [日常使用](#界面一览) · [作品案例](#从草图到作品) · [使用指南](docs/GUIDE.zh-CN.md) · [更新与卸载](#更新与卸载)
 
 </div>
 
-<p align="center">
-  <img src="docs/assets/codex-subscription-overview.webp" width="900" alt="在 DeepSeek Harness 登录 ChatGPT 并使用 Codex 订阅：无需 API Key，支持模型选择和剩余额度显示">
-</p>
+<p align="center"><img src="docs/assets/product-account-demo.png" width="1100" alt="Codex 订阅账号与额度界面：模型选择、双周期额度与提醒；使用演示数据"></p>
 
-兼容 DSH `0.1.7-rc.2` 与 `0.2.1-alpha.1` 预览版，同时保留已支持版本的兼容。预览版使用 Pi `0.87.1`；provider 原样转发其规范化的转录上下文，不重新构建提示词或工具。
+## 功能一览
 
-## 三步开始
+把订阅接入、模型控制、额度管理和图片创作放在同一个 DSH 工作流里。下面逐项列出插件提供的能力；模型权限和额度以账号实际返回为准。
 
-1. **安装插件**：打开 **插件 → 添加插件**，在 **包名或地址** 中填写 `@pascapone/dsh-codex-subscription`，点击 **安装**。
-2. **登录订阅**：按安装结果提示操作；若提示需要重启，先保存工作再重启。打开 **设置 -> Codex 订阅**，点击浏览器登录。无需 Codex CLI，也不要粘贴 token。
-3. **开始使用**：在模型选择器中选择 Codex；额度、订阅搜索、图片生成和高速模式都在 DSH 内使用。
+### 模型与搜索
 
-详细安装步骤、终端方式以及更新与卸载说明见下文。
+| 功能 | 你可以做什么 | 使用方式 / 条件 |
+| --- | --- | --- |
+| **订阅登录** | 直接登录 ChatGPT，使用 Codex 订阅模型，无需 API Key | 普通聊天无需 Codex CLI |
+| **模型目录同步** | 自动读取账号可用模型与推理档位，支持手动刷新；目录标注退役的模型会在模型名称旁显示退役日期，不会自动切换你的选择 | 新型号以账号目录开放情况为准；成功刷新的账号目录决定模型可用性；刷新前保留分支离线元数据，不授予账号访问权限 |
+| **模型列表** | 在“模型与运行”中逐个显示或隐藏输入框中的模型 | 仅影响列表显示；已选模型和请求不受影响 |
+| **默认模型** | 在“模型与运行 → 模型”里选择每次新建会话默认使用的模型 | 写入 DSH 的默认模型设置，与在对话里切换模型是同一处；未设置时跟随 DSH 默认 |
+| **推理等级** | 在输入框选择模型支持的推理档位 | 档位随模型变化 |
+| **速度档位** | 在支持的模型上切换标准 / Fast；账号目录提供时还有 Ultrafast（Beta），输入框显示闪电标识 | 默认标准；Fast 和 Ultrafast 会增加用量消耗，Ultrafast 目前仅 Pro 500 |
+| **输出详略** | 选择简短、适中或详细的回答偏好 | 默认跟随模型 |
+| **输入图片精度** | 为发送给聊天模型的图片选择低、高、原图或自动精度 | 影响输入 token 用量；默认自动 |
+| **订阅联网搜索** | 使用 Codex 搜索，或选择 DSH 搜索 | 可选自动、DSH、Codex 路由 |
+| **搜索范围** | 选择实时 / 缓存搜索、关闭搜索，或限定域名 | 在模型与运行中设置 |
+| **流无响应超时** | 设置连续没有收到流式数据时中断请求的时长 | 默认 10 分钟；不是整体回答时限 |
+| **上下文预算** | 按模型使用标准、扩展或自定义上下文预算 | 受模型目录上限约束 |
+| **GPT-Reserve** | 在账号开放时选择备用模型入口 | 实验性；不承诺独立备用额度 |
 
-## 核心优势
+### 账号与额度
 
-| 能力 | 用户得到什么 |
-| --- | --- |
-| **订阅模型直连** | 登录 ChatGPT 后直接使用 Codex，不需要 OpenAI API Key 或 Codex CLI |
-| **可恢复、可诊断** | 登录状态会自动对账；读取失败时可在原处重试，超时和旧账号响应不会覆盖当前状态；设置页可生成不含凭据和账号标识的支持报告 |
-| **额度可见** | 普通 Codex、Spark 等服务端实际返回的额度分开显示，并显示重置时间 |
-| **输入框额度** | 可选择紧凑百分比、进度条、Beta 续航预测或关闭显示 |
-| **安全额度重置** | 每张重置卡单独显示，并通过冷静期和知情确认主动尝试重置 |
-| **订阅搜索** | 可将全部模型的搜索明确路由到 DSH 默认搜索或已登录的 Codex 订阅 |
-| **订阅语音转文字（实验）** | 在 **设置 → Codex 订阅 → 高级与诊断** 开启。输入框麦克风直接由本插件提供：X 丢弃录音，停止键填入草稿，箭头转写并发送。复用已有 OAuth 登录，音频发送给 ChatGPT；无需额外语音插件，默认关闭。若同时安装其他使用默认麦克风位置的语音插件，会优先显示其控件，本插件的其他功能不受影响。 |
-| **Codex 图片生成与编辑（Beta）** | 可无参考图全新生成，也可明确选择会话图片继续编辑；支持预览、缩放、区域备注、下载原图，并为新生成或编辑的图片提供 DSH 主机上的原图路径 |
-| **高速模式** | 直接在输入框切换标准或高速，无需离开当前会话 |
-| **模型感知上下文** | 可保留目录默认值、按模型启用扩展窗口，或为每个模型填写完整数字 Token 上限；设置页打开、账号切换和连接重置后会刷新模型目录，失败时可重试且不会覆盖未保存的草稿 |
-| **Headless 任务** | 使用同一份已登录的 Codex Provider 运行一次性 DSH 任务，输出答案后自动退出 |
+| 功能 | 你可以做什么 | 使用方式 / 条件 |
+| --- | --- | --- |
+| **多账号管理** | 添加、切换、移除账号，或退出全部账号 | 设置 → 账号与额度 |
+| **额度详情** | 查看短周期 / 每周额度、重置时间及独立额度分组 | 仅展示服务端返回的窗口与分组 |
+| **Credits 与重置卡** | 查看额外 Credits、消费上限和可用重置卡 | 账号返回对应数据时显示 |
+| **输入框额度** | 不离开会话即可查看百分比或进度条 | 默认关闭，可选显示方式 |
+| **续航预测** | 根据最近使用速度估算剩余可用时长 | Beta；可选，不是保证值 |
+| **额度提醒** | 使用固定阈值、提前提醒，或分别设置短 / 长周期阈值 | 默认剩余 20% 提醒，可关闭 |
+| **使用重置卡** | 在确认后主动使用服务端提供的重置卡 | 二次确认与等待保护，由服务端判定结果 |
+| **重置后重试** | 等待已确认的短时额度重置，再继续请求 | 默认关闭；等待期间可停止 |
 
-这些能力共用同一份本机 ChatGPT 登录。订阅路由失败时会明确报错，不会静默切换到其他付费路由。
+### 图片与草图
 
-DSH Multi-Agent 的新建子代理支持 `speed_mode: "standard" | "fast"`，默认标准速度。子代理首次请求前保存独立速度，恢复后保留，不改变父代理设置。不支持高速的模型会报错；启动失败会删除预先保存的设置。高速委派需要同时更新两个插件。
+| 功能 | 你可以做什么 | 使用方式 / 条件 |
+| --- | --- | --- |
+| **图片生成** | 通过订阅生成图片，调整可用的请求型号与质量；需要时可生成透明背景 PNG | Beta；默认开启，可关闭 |
+| **参考图编辑** | 带上参考图继续修改作品 | Beta；默认开启，可关闭 |
+| **图片查看与下载** | 完成的出图结果直接显示在回答后，无需展开工具过程；可缩放、拖动、适合窗口、下载校验后的原图 | 内置查看器，无需另装；旧图可能只有预览 |
+| **区域标注编辑** | 在图上圈定区域、填写备注，带定位参考继续编辑 | 回填输入框后由你确认发送 |
+| **手绘画板** | 选择画布比例，使用钢笔、铅笔、荧光笔及橡皮 | Beta；画板默认关闭 |
+| **形状与文字** | 绘制直线、箭头、形状、原生曲线，选中修改对象和文字 | 在草图画板中使用 |
+| **图层与图片导入** | 分层创作，将图片加入草图继续画 | 图片作为图层管理 |
+| **笔画平滑与导航** | 抬笔后平滑整条路径；拖动、缩放、撤销重做 | 快捷键可自定义和关闭 |
+| **多份草稿** | 保存并重新编辑最多 20 份本地草稿 | 保存在当前浏览器 |
+| **导入与导出** | 导入／导出分层 PSD、导出 PNG，或交换保留原生笔画的草稿文件 | PSD 支持 8-bit RGB 像素图层；草稿保留原生可编辑对象 |
+| **Agent 绘图** | 用 `@sketch` 让 Agent 绘制，查看进度并随时停止；Agent 可用 SVG 整段作画，导入为可编辑原生笔画 | Beta；默认关闭，需同时开启画板 |
 
-## 实际界面
+### 进阶能力与维护
 
-<p align="center">
-  <img src="docs/assets/subscription-account.png" width="820" alt="DSH Codex 订阅主界面：ChatGPT 登录、剩余额度与输入框偏好">
-</p>
+| 功能 | 你可以做什么 | 使用方式 / 条件 |
+| --- | --- | --- |
+| **Codex 独立子任务** | 复用订阅登录和工作区权限执行独立任务，可指定允许的模型与推理档位 | Beta；默认 DSH，Codex 需安装可选组件并配置模型选择 |
+| **子任务组件管理** | 在设置里安装、停用或卸载官方 Codex 子任务组件 | 由支持的 DSH 宿主管理，无需额外登录 |
+| **云端上下文压缩** | 使用 Codex 云端压缩继续长对话，同时保留 DSH 历史与原生压缩 | Beta / 实验性；默认关闭，开启的请求使用 SSE |
+| **WebSocket 连接** | 实验性复用连接和上下文传输，连接失败可回退 SSE | Beta / 实验性；默认 SSE，不保证更快 |
+| **Auto review 官方审查模型** | DSH Auto review 改用 Codex 自带的审查模型判断工具调用，审查规则与放行流程仍由 DSH 负责 | Beta；默认关闭，账号目录提供该模型时生效 |
+| **支持诊断** | 查看功能前置条件和近期操作结果，一键复制约 1 KB 的精简报告（完整报告可另行复制）；不含凭据和会话正文 | 设置 → 维护；未验证不代表故障 |
+| **预测缓存清理** | 查看并清理本地额度预测历史 | 保留登录、草稿、原图和共享依赖 |
 
-上图为“账号与偏好”主界面，展示登录状态、订阅额度和输入框偏好。截图中的账号、额度、余额与时间均为演示数据，不代表套餐固定权益。高级功能与可选组件见下文。
+[详细用法、限制与可选组件 →](docs/GUIDE.zh-CN.md)
 
 ## 准备 DSH
 
+已验证兼容 DSH `0.2.0-rc.2`（`next` 通道）和 `0.1.7-rc.2`（`latest` 通道），并继续支持更早的已验收版本。
+
 本插件支持软件包元数据中记录的最新版 DeepSeek Harness，并需要一个当前具有 Codex 使用资格的 ChatGPT 账户。
 
-- 不想配置 Node.js：使用 [DSH-Portable](https://github.com/WSL043/DSH-Portable)。这是面向 Windows、macOS 和 Linux 的社区便携桌面分发；
+- **推荐：官方桌面端**。DeepSeek 已发布 [DeepSeek Harness 桌面版](https://www.deepseek.com/harness/)（macOS Apple Silicon、Windows 64 位，预览版、开源），无需配置 Node.js，安装后按下文在插件页面添加本插件即可。桌面端与网页版、命令行使用同一套 DSH 插件系统；本插件的端到端验收主要在网页版上完成，桌面端遇到问题请[提交 issue](https://github.com/Pascapone/dsh-codex-subscription/issues)；
+- 需要 Linux，或想要社区便携分发：使用 [DSH-Portable](https://github.com/WSL043/DSH-Portable)。这是面向 Windows、macOS 和 Linux 的社区便携桌面分发；
 - 想按官方方式运行：查看 [DeepSeek Harness 官方说明](https://github.com/deepseek-ai/deepseek-harness#run)。
 
 ## 安装
@@ -73,22 +102,16 @@ DSH Multi-Agent 的新建子代理支持 `speed_mode: "standard" | "fast"`，默
 ### 在插件页面安装（推荐）
 
 1. 打开 DSH 的 **插件 → 添加插件**。
-2. 在 **包名或地址** 输入框中粘贴包名：
+2. 在 **包名或地址** 输入框中粘贴下面的包名（已带版本号）：
 
    ```text
-   @pascapone/dsh-codex-subscription
-   ```
-
-   使用 DSH `0.1.7-rc.2` 时，在 `2.2.1` 发布到 npm 之前，请改填此 Fork 的 GitHub 地址：
-
-   ```text
-   https://github.com/Pascapone/dsh-codex-subscription
+   @pascapone/dsh-codex-subscription@2.5.9
    ```
 
 3. 点击 **安装**，等待安装完成；按页面提示操作，需要重启时先保存工作。
 4. 打开 **设置 → Codex 订阅**，登录 ChatGPT，然后在会话中选择 Codex 模型。
 
-此 GitHub 地址安装支持 DSH `0.1.7-rc.2` 的 Fork 版本 `2.2.1`。不带版本号的包名安装 npm 上最新发布的版本，目前尚不包含此更新。此处只填一个包名或地址，不要粘贴整条终端命令。
+为什么要带版本号：DSH 的插件页只会安装发布满 24 小时的版本，只填包名时，新版本发布后的第一天可能装到更早的旧版，而旧版不一定兼容你的 DSH。带上版本号可以直接装到这一版；发布一天后只填 `@pascapone/dsh-codex-subscription` 也会装到最新正式版。其他版本号见[发布页](https://github.com/Pascapone/dsh-codex-subscription/releases)。
 
 <details>
 <summary>终端安装（已能运行 dsh 命令）</summary>
@@ -113,185 +136,173 @@ dsh --profile headless "只回复：ok"
 
 </details>
 
-## 功能说明
+## 界面一览
 
-### 执行中补充指令
+<details>
+<summary><b>界面演示（动图，点击展开）</b>：选模型、提问、出图、标注、草图、额度与重置</summary>
+<br>
+<p align="center"><img src="docs/assets/readme-demo.webp" width="1100" alt="演示：登录 ChatGPT 选订阅模型、提问、用订阅出图、查看与标注、进入草图、查看额度与重置"></p>
+</details>
 
-沿用 DSH 原生消息队列：生成中发送消息可排队到下一轮；界面提供插话入口时，可用其快捷键将排队内容交给当前轮的下一步处理。插话不是立即改写正在生成的响应。
+### 日常操作，留在输入框
 
-### GPT-Reserve（实验性）
+选模型、调推理档位、切换速度档位，同时查看剩余额度。无需为每次请求打开设置。
 
-账号的官方模型目录提供 `gpt-reserve` 时，模型选择器末尾会出现实验性选项。可用性和扣费归属由服务端决定；请求成功不代表已确认使用独立备用额度。即使普通 Codex 额度显示已用尽，服务端也可能只在模型目录中返回 `gpt-reserve`，不返回独立的 Reserve 额度桶。此时输入框将 Reserve 额度视为未知，不会借用普通 Codex 额度；服务端返回“允许使用”也不能证明请求扣的是 Reserve。
+<p align="center"><img src="docs/assets/composer-astra-fast.png" width="800" alt="DSH 输入框：GPT-6-Astra Max、闪电标识的 Fast 高速模式与剩余额度"></p>
 
-### GPT-6 Sol / Luna
+### 账号与偏好，集中管理
 
-GPT-6.1 Sol、GPT-6 Sol 和 GPT-6 Luna 已在 [Codex 模型目录](https://github.com/openai/codex/blob/1983c48fd1/codex-rs/models-manager/models.json)中列出。插件会从当前账号的 Codex 模型目录自动读取可用模型及推理档位；对于 pi-ai 内置目录尚未包含这些模型的宿主，还会提供 6.1 Sol、Sol 和 Luna 的离线回退项。账号目录刷新成功后，模型可用性与能力仍以服务端目录为准。根据 [OpenAI 公告](https://x.com/thsottiaux/status/2109430343346581527)，GPT-6.1 Sol 默认使用 500000 Token，即使本机或账号目录仍返回 272000；服务端明确给出更低最大值时仍遵守该上限。既有离线扩展上限保持 872000，并支持高速模式。其他模型保留当前默认值；显示回退项不代表服务端已向账号开放该模型。
+在 **设置 → Codex 订阅** 中管理账号和额度；其余功能按任务需要开启。
 
-### 按模型配置上下文
+<details>
+<summary>四个设置页分别做什么？</summary>
 
-打开 **设置 → Codex 订阅 → 高级与诊断 → 上下文窗口 → 按模型配置 Token 上限**，切换到自定义并填写完整 Token 数值。输入框沿用已有默认值，仅 GPT-6.1 Sol 初始值改为 500000。离开输入框或按 Enter 后保存；切换模式、刷新目录和升级不会替换已保存的自定义值。标准模式恢复模型默认值，扩展模式使用各模型最大值。这些仅是 DSH 本地上下文预算，不提升服务端容量；自定义值仍受模型上限约束。
+| 设置页 | 在这里做什么 |
+| --- | --- |
+| **账号与额度** | 登录与切换账号、查看重置时间、设置额度显示和提醒 |
+| **模型与运行** | 订阅搜索、上下文预算、连接方式与独立子任务 |
+| **图片与草图** | 分别开启图片生成、画板和 Agent 绘图 |
+| **维护** | 生成支持诊断、管理本地额度预测缓存 |
+
+**模型感知上下文**跟随账号模型目录，刷新不会覆盖未保存的草稿。额度分组以服务端实际返回为准，包括 Spark 等独立额度。
+
+订阅请求失败时会明确报错，不会静默切换到其他付费路由。
+
+</details>
+
+[查看完整使用指南 →](docs/GUIDE.zh-CN.md)
+
+## 从草图到作品
+
+图片生成与编辑、草图画板均为 **Beta**。画板和 Agent 绘图默认关闭，在“图片与草图”中按需开启。
+
+**画草图 → 附加到输入框 → 描述效果 → 生成成图。**
+
+手动画图时点击画板按钮；让 Agent 绘图时发送 `@sketch` 加绘图要求。
+
+<table>
+<tr><th width="50%">Agent 绘制的原生草图</th><th width="50%">以草图为唯一参考的生图结果</th></tr>
+<tr><td><img src="docs/assets/sketch-lighthouse-sketch.webp" alt="GPT-6.1-Sol 绘制的灯塔与归航草图" width="480"></td><td><img src="docs/assets/sketch-lighthouse-result.webp" alt="根据草图生成的灯塔水彩海报" width="480"></td></tr>
+</table>
+
+**GPT-6.1-Sol · Xhigh**，官方桌面版 0.2.0-rc.2 实测：一条 `@sketch` 消息完成 6 个图层、229 笔可编辑原生笔画，再以这张草图为唯一参考调用一次 GPT Image 2（质量：高），全程约 13 分钟。
+
+```text
+@sketch 用 4:3 横版画板绘制《灯塔与归航》：左侧礁石岬角上立一座红白条纹灯塔，塔顶灯室射出扇形光束；右侧海面上一艘挂橙色小帆的渔船正驶回港湾，船后拖出 V 形水痕；地平线上是半个初升的太阳，天空有三条横向云带和三只海鸥，前景礁石间有一圈白色浪花。按天空、太阳与云、海面、礁石与灯塔、渔船、海鸥与浪花分层绘制，保留原生可编辑笔画。画完后，把这张草图作为唯一参考图，调用订阅图片工具一次生成成品：保持构图不变，做成温暖的水彩旅行海报，晨光金橙配靛青海面，有纸纹和柔和晕染，不添加文字。
+```
+
+<details>
+<summary>进阶展示 · 机械剖面、青绿山水与 DeepSeek 娘临摹</summary>
+
+前两道题都选了容易暴露差距的题材：机械剖面考结构与细节（齿轮咬合、摆锤、链条、楼梯上的人物），青绿山水考构图与审美（三远法、留白、皴法与设色）。同一条提示词分别交给 **GPT-6.1-Sol · Xhigh** 和 **GPT-6-Astra · Low**，各跑一次，均在官方桌面版上完成，生图统一为 GPT Image 2（质量：高）。
+
+**《钟塔剖面图》**
+
+<table>
+<tr><th></th><th width="45%">原生草图</th><th width="45%">生图结果</th></tr>
+<tr><td><b>Sol<br>Xhigh</b></td><td><img src="docs/assets/sketch-clocktower-sol-sketch.webp" alt="Sol 绘制的钟塔剖面草图" width="400"></td><td><img src="docs/assets/sketch-clocktower-sol-result.webp" alt="Sol 草图生成的钟塔剖面插画" width="400"></td></tr>
+<tr><td><b>Astra<br>Low</b></td><td><img src="docs/assets/sketch-clocktower-astra-sketch.webp" alt="Astra 绘制的钟塔剖面草图" width="400"></td><td><img src="docs/assets/sketch-clocktower-astra-result.webp" alt="Astra 草图生成的钟塔剖面插画" width="400"></td></tr>
+</table>
+
+Sol 先用脚本算出 9 个齿轮的齿数（48、38、27、46、36、24、34、30、22）与节圆，再按咬合位置排布，绘图约 1 小时；第一次生图请求失败，按它的询问同意重试一次后成功。Astra Low 约 5 分钟完成全部草图与生图，结构更简化，齿轮没有逐一校准。
+
+**《千峰翠色》**
+
+<table>
+<tr><th></th><th width="45%">原生草图</th><th width="45%">生图结果</th></tr>
+<tr><td><b>Sol<br>Xhigh</b></td><td><img src="docs/assets/sketch-shanshui-sol-sketch.webp" alt="Sol 绘制的青绿山水草图" width="400"></td><td><img src="docs/assets/sketch-shanshui-sol-result.webp" alt="Sol 草图生成的青绿山水" width="400"></td></tr>
+<tr><td><b>Astra<br>Low</b></td><td><img src="docs/assets/sketch-shanshui-astra-sketch.webp" alt="Astra 绘制的青绿山水草图" width="400"></td><td><img src="docs/assets/sketch-shanshui-astra-result.webp" alt="Astra 草图生成的青绿山水" width="400"></td></tr>
+</table>
+
+Sol Xhigh 约 28 分钟，Astra Low 约 5 分钟。两者都保留了主峰、瀑布、栈道与江面的位置；Sol 的远山层次和雾带留白更完整。
+
+**《DeepSeek 娘》· 照着参考图临摹（只画不生图）**
+
+这道题把一张参考图作为附件发给模型，让它在画板上临摹，考的是比例、渐变长发、蕾丝褶边、手写字和小图案能不能对得上。参考图是社区流传的 DeepSeek 娘表情包。每格都在官方桌面版上跑一次，没有调用生图；原生笔画版开启了“完成后返回预览”，SVG 版在同一条提示词后加了一句“每层用 svg 命令”。
+
+<table>
+<tr><th width="20%">参考图</th><th width="40%">原生笔画</th><th width="40%">SVG</th></tr>
+<tr><td rowspan="2"><img src="docs/assets/sketch-niang-reference.webp" alt="DeepSeek 娘表情包参考图" width="220"></td><td><img src="docs/assets/sketch-niang-sol-native.webp" alt="Sol 原生笔画版" width="330"><br><sub><b>Sol Xhigh</b> · 40 分 50 秒 · 526 笔</sub></td><td><img src="docs/assets/sketch-niang-sol-svg.webp" alt="Sol SVG 版" width="330"><br><sub><b>Sol Xhigh</b> · 31 分 48 秒 · 463 笔</sub></td></tr>
+<tr><td><img src="docs/assets/sketch-niang-astra-native.webp" alt="Astra 原生笔画版" width="330"><br><sub><b>Astra Medium</b> · 约 7 分钟 · 332 笔</sub></td><td><img src="docs/assets/sketch-niang-astra-svg.webp" alt="Astra SVG 版" width="330"><br><sub><b>Astra Medium</b> · 10 分 5 秒</sub></td></tr>
+</table>
+
+SVG 版的发丝高光、蕾丝褶边和手写字更精细，Sol 用 SVG 还比逐笔绘制快了近 9 分钟；Astra 用 SVG 多花约 3 分钟，换来明显更丰富的细节。两个模型都没能画准脸型（偏长偏平）和围裙上的小鲸鱼图案，Sol 的鲸鱼更像鲸。
+
+**同一题再跑一次：让模型自己叠图对照**
+
+这一次提示词和附件方式都和上面一样，只是插件多了两样东西：模型可以用 `reference` 把聊天里附的参考图放进画板（作为隐藏的图片图层），并且在预览时打开 `compare`（把画作和参考图各占 50% 叠在一起，位置偏差会显示成重影）和 `grid`（每 100 像素一条带数字的网格）。同一题、同一个 Astra Medium，在官方桌面版上跑了一次，没有调用生图，共 20 分 57 秒、7 个绘画图层、686 条原生笔画；模型还用脚本批量生成了发丝和花边，并在画的过程中多次叠图检查、修正文字和蕾丝遮挡。
+
+<table>
+<tr><td><img src="docs/assets/sketch-niang-astra-compare.webp" alt="Astra Medium 叠图对照版" width="380"><br><sub><b>Astra Medium</b> · 20 分 57 秒 · 686 笔</sub></td><td><img src="docs/assets/sketch-niang-astra-overlay.webp" alt="模型看到的叠图对照预览" width="260"><br><sub>模型看到的叠图预览：文字和发丝边缘的重影就是偏差</sub></td></tr>
+</table>
+
+脸型、长发走向、蕾丝、手和气泡字都比上面的两个 Astra 版更接近参考图，耗时约是 SVG 版的两倍。这是单次运行，不同提示词和参考图的效果可能不同。
+
+<details>
+<summary>展开三道题的完整提示词</summary>
+
+```text
+@sketch 用 3:4 竖版画板绘制《钟塔剖面图》：蒸汽朋克风格的钟塔纵向剖面技术插图。最上方是圆形大钟面（十二个刻度、两根指针）和一口铜钟；钟面下一层是齿轮机房：至少 9 个大小不同、齿数正确、彼此咬合的齿轮（相邻齿轮转向相反，齿廓要画出锯齿），另有一个锚形擒纵机构；中段是一根贯穿的长摆杆，末端为铜制圆盘摆锤，旁边两条挂着配重铁块的链条；塔壁一侧是沿墙盘旋而上的螺旋楼梯，梯上有三个微小的工匠人物；底部是石砌地基与拱门。剖面用厚实的暗色砖石墙体框出，内部露出黄铜与铁质结构，加入铆钉、管道，以及从小窗透进来的光柱。按背景砖墙、结构框架、齿轮组、摆锤与链条、楼梯与人物、光影与细节分层绘制。画完后，把这张草图作为唯一参考图，调用订阅图片工具一次生成成品：保持每个部件的位置、比例与咬合关系不变，做成精密的蒸汽朋克剖面图插画——黄铜与旧钢的金属质感、细致的机械倒影和铆钉、羊皮纸底色配墨线渲染、暖色灯光，不添加文字。
+```
+
+```text
+@sketch 用 3:4 竖版画板绘制《千峰翠色》：宋代青绿山水的构图，严格运用「三远法」。高远：右侧一座主峰拔地而起，占画面上半部，山体用层叠的块面表现，山腰有横向的云雾留白；深远：主峰后方还有两重淡青色远山，越远越淡，之间隔着大片留白的雾带；平远：下方是舒展的江面，一叶渔舟和两只飞鸟。左侧一挂瀑布从中段峭壁倾泻而下，落入山涧，涧边有三株松树，松针成簇；山腰有一座小亭和一条曲折栈道，栈道上有两个极小的行者；前景是坡石与芦苇，用勾勒加披麻皴式的笔触表现。色彩层次为石青、石绿、赭石，远山用淡青。按远山与天空、雾带留白、主峰、瀑布与松树、亭台栈道与行者、江面舟鸟与前景分层绘制。画完后，把这张草图作为唯一参考图，调用订阅图片工具一次生成成品：保持山体、瀑布、栈道、江面的位置和三远法的层次不变，做成宋代青绿山水绢本设色——石青石绿矿物颜料的沉着厚重、细腻的皴擦与勾勒、绢面纹理与微微泛黄的古意、云雾留白，不添加文字或印章。
+```
+
+```text
+@sketch 用 1:1 方形画板，尽可能忠实地临摹我附上的这张参考图（一张 Q 版二次元表情包）。画面：白色底；Q 版二头身的蓝发鲸鱼娘跪坐在画面右侧偏中，蓝色渐变长发披肩（发根深蓝、发梢浅蓝），头顶一根呆毛，戴白色蕾丝女仆头饰和蓝色蝴蝶结，头两侧是深蓝色带白色内里的鲸鱼耳鳍，蓝色大眼睛带高光，猫嘴嘟嘴的“ω”表情，脸颊泛红，双手叉腰；穿深蓝色女仆装，白色蕾丝围裙（围裙上有一只蓝色小鲸鱼图案），黑色领结，袖口和裙摆有白色蕾丝褶边；身后露出一条深蓝色的鲸鱼尾巴。左上方是白色对话气泡（黑色描边，尖角指向她），气泡里用黑色粗体写“你这吃白饭的蓝色大肥鱼。”；左侧从画面外伸进来一只黑袖子的手，食指指向她；她的左下方用蓝色描边字写“没吃饱喵！”；她脚边的地上放着一只空的白瓷饭碗，碗内壁印着一只蓝色小鲸鱼。请分层绘制：白色背景、头发与鲸鱼耳鳍与尾巴、身体与服装、脸部五官、饭碗、手臂与对话气泡文字，保留原生可编辑笔画，并特别注意角色比例、头发的渐变与发丝走向、蕾丝褶边和脸部表情的细节。这次只在草图画布上画，不要调用任何生图或图片编辑工具；画完后检查一遍与参考图的差异并修正，最后保存并完成。
+```
+
+SVG 版在“这次只在草图画布上画”之前多加了一句：
+
+```text
+作画方式：每个图层都用 svg 命令整层写成 SVG（路径用贝塞尔曲线，配色手动分层做出渐变感），不要逐点使用原生笔画命令。
+```
+
+</details>
+
+每个例子只跑一次，不代表稳定水平；Sol Xhigh 耗时明显更长，日常草图用 Astra 或较低推理档即可。
+
+</details>
+
+<details>
+<summary>查看图片与草图设置</summary>
+
+<p align="center"><img src="docs/assets/real-creative-zh.png" width="564" alt="图片与草图设置：生图编辑、请求型号，以及独立的画板和 Agent 开关"></p>
+
+DSH 实机设置截图。
+
+</details>
+
+支持图层、原生曲线、笔刷、撤销重做和快捷键；可保存多份草稿，导出 PNG 或可编辑草稿。生成图可标注区域后继续编辑。
+
+[图片编辑与草稿保存 →](docs/GUIDE.zh-CN.md#图片生成与编辑beta)
+
+<a id="codex-subtask-runtime"></a>
+
+## 按需扩展
+
+普通订阅聊天无需 Codex CLI。需要 **Codex 独立子任务** 时，可在“模型与运行”中点击“安装组件”，停用和卸载也在同一处完成。其余实验选项按需开启。
+
+[可选组件、存储清理与完整使用指南 →](docs/GUIDE.zh-CN.md)
+
+## Fork 保留功能
+
+插件源码使用严格 TypeScript，保留 DSH `0.2.1-alpha.1` / Pi `0.87.1` 兼容；构建此工作树不会更改 Production。
+
+- **订阅语音转文字（实验）：** 默认关闭；输入框麦克风复用 Codex OAuth，将音频发送给 ChatGPT。支持丢弃、填入原会话草稿，或明确转写并发送。
+- **移动端模型选择与会话速度：** 标准、Fast 与账号提供的 Ultrafast 在输入框选择，按会话保存；标准模式不显示闪电图标。
+- **可选 Headroom：** 仅路由到已验证的本机 Codex 代理；组件不可用时保持直连。
+- **PSD：** 保留独立 worker 与导入导出 codec，同时支持 PNG 和原生可编辑草稿。
+- **恢复：** 安装 dsh-robust 时由其负责重试，关闭 Codex 独立额度等待，避免竞争；不改写上游 retry-buffer 错误。
+- **账号目录：** 成功刷新的账号能力具有权威性；刷新前保留分支离线元数据，但不授予服务器访问权限。
+- **草图预览：** Agent 可在阶段间请求 preview、compare 和 grid；finish 不自动附加预览。
 
 ### 可选 DSH 模型指导
 
 在 **设置 → Codex 订阅 → 高级与诊断 → DSH 模型指导** 可开启，默认关闭。为 GPT-6 Astra、Sol、6.1 Sol、Luna **附加**本地维护的 DSH 适配版提示词，保留现有系统提示词和运行上下文。保留 Codex 的清晰沟通、独立判断和持续完成已授权任务的理念，遵循 DSH 的身份、工具、权限、工作模式和文件链接规则。Astra 侧重复杂任务与技术解释；Sol 侧重有明确范围的实现和适度验证；Luna 侧重小型低风险修改，优先复用现有检查，复杂或关键实现需交由更合适的模型处理。所有模型仍须遵守必要验证要求。这是行为指导，不是权限隔离，也不会自动切换模型。
 
 这些是基于 [Codex 模板](https://github.com/openai/codex/blob/8e17909b27875b76b1e9a883a604ed24e969d609/codex-rs/models-manager/models.json)（Apache-2.0）审阅改写的版本，**不再读取远程目录中的提示词**；目录仍用于更新模型能力。仅精确匹配 `gpt-6-astra`、`gpt-6-sol`、`gpt-6.1-sol`、`gpt-6-luna`（6.1 Sol 与 Sol 共用提示词），切换模型后下次组装生效，其他模型不附加。既有 `codexBasePrompt` 开关值保持不变，开启后使用新的 DSH 适配版。独立 Codex 子任务由 Codex 自身管理。强制使用完整提示词的 DSH preset 可能阻止附加段落。
-
-### GPT-6 Astra 上下文
-
-当官方模型目录提供 GPT-6 Astra 时，标准模式保留目录默认窗口；扩展模式使用 872000 Token，自定义模式可设置 128000–872000 Token（初始值为 272000）。该上限依据 [Codex 官方模型目录](https://github.com/openai/codex/blob/6af345407d9c2a568da9d01b6c4b81a9e61495c0/codex-rs/models-manager/models.json#L33-L34)，不是 API 模型的总上下文容量。这些设置只调整 DSH 的本地上下文预算，不授予模型访问权限，也不保证账号的服务端容量；实际可用性以服务端为准。
-
-### 输入框额度
-
-<p align="center">
-  <img src="docs/assets/composer-quota.png" width="800" alt="DSH 实机输入框：GPT-6-Astra、Max 推理、高速模式和剩余额度">
-</p>
-
-实机示例：GPT-6-Astra · Max（最高推理档）· 高速模式（闪电标识），左侧直接显示剩余额度。
-
-可在“账号与偏好”选择关闭、百分比、进度条或 Beta 续航预测。存在 5 小时额度时，输入框只显示短窗口；每周额度等完整信息留在悬浮详情。仅有周额度时省略“周”字，预测采用 `36% · ≈10h–12h` 这样的紧凑格式。
-
-续航预测根据最近两小时的官方读数估算，额度不变的采样同样参与计算。满足条件时利用连续跳格约束速度，读数不足或使用强度变化时会退回保守估计。范围不是实际可工作时间的保证，仍标记 Beta。历史在本机有限保存；重置、长时间离线或关闭预测会重新校准。
-Spark 使用独立额度。只返回每周额度的账号仍只显示每周，不会虚构 5 小时窗口、Credits 或消费上限。
-
-### 安全使用额度重置
-
-ChatGPT 返回可用重置卡时，设置页会把每张卡分别显示为紧凑的一行，并展示服务端提供的名称和到期时间。即使额度尚未到 100%，
-也可以主动尝试使用，适合重置卡即将过期的情况；是否需要重置仍由 ChatGPT 判断，服务端可能返回“当前无需重置”且不扣次数。
-最终操作需要勾选知情确认并等待 5 秒。取消不会消耗，快速连续点击只允许一次请求，网络结果不确定时也不会自动重试。
-
-### 图片生成与编辑（Beta）
-
-订阅插件已内置基于 `dsh-image-viewer` 的基础查看器，无需额外安装。插件生成图片的工具卡片使用内置查看器，确保标注和继续编辑功能可用。你可以缩放、拖动、适合窗口、添加区域备注并下载图片。标准“下载”默认获取经过权限与完整性校验的精确原图；旧会话没有精确原图时才下载会话预览图。
-
-新生成或编辑的图片会在工具结果中返回当前 DSH 主机上的原图路径，模型或 Agent 可以读取或复制该文件。该路径位于运行 DSH 的主机，并非浏览器下载链接；原图下载仍按会话授权。卸载插件不会删除已生成的原图。
-
-点击“在输入框中继续编辑”不会自动发送。有标注时会附上干净源图和带编号标记的定位参考图，草稿包含对应编号、坐标、备注，以及不得把标记绘入成品的说明；没有标注时只附上当前图片。每个标记必须填写备注，参考图准备失败时会中止回填。按 Enter 保存并收起备注，Shift+Enter 换行；在当前 DSH 页面重新打开同一张图片时，备注仍会保留。
-
-新的图片请求不会静默带入历史图片。GPT Image 2 可能比文本回复耗时更长，复杂文字、精确构图和连续角色一致性也可能需要再次调整。
-
-<p align="center">
-  <img src="docs/assets/image-preview-annotations.png" width="800" alt="DSH 图片查看器中的生成图、区域备注和继续编辑">
-</p>
-
-上图展示图片查看与图上备注的基本交互；具体按钮会随图片和所安装的查看器版本变化。
-
-### 草图画板（Beta）
-
-![草图画板实机界面：画布比例、笔刷、形状、图层与缩放](docs/assets/sketch-canvas.png)
-
-点击输入框的草图按钮手动画图。`@sketch` 是 Agent 绘图入口：选择时只填入输入框，发送绘图请求后才由 Agent 打开画板。图片预览中可选择“进入草图”；上传、粘贴和移除附件仍由 DSH 原生组件处理。
-
-草图支持多份本地草稿、图片图层、画布比例、三种笔刷（实色钢笔、颗粒铅笔、半透明荧光笔）、直线和形状、两种橡皮、撤销重做、拖动缩放与可配置快捷键。平滑仅在抬笔后处理整笔路径，不拖慢绘画光标。草稿最多 20 份，仅保存在当前浏览器；附加草图不会自动发送。左侧图片面板只管理当前草图的图片，不是会话图片库。
-
-支持可选中修改的形状与文字、原生曲线，以及侧边粗细/浓度控件。Agent 绘制时可查看、缩放和关闭面板，编辑暂时锁定；顶部可停止绘制，完成后恢复编辑。自动完成预览默认关闭，可在高级设置开启。切换会话后再返回会保留画板、历史和运行状态。切到其他会话期间不保证后台绘制；整页刷新或退出前请保存草稿，未保存内容不保证恢复。
-
-**草图生成图片实测**：画好后点击“附加”，在输入框说明想要的效果，再发送。
-
-| 画板原草图 | 插件实际生成结果 |
-| --- | --- |
-| ![山峰与小屋草图](docs/assets/sketch-demo-source.png) | ![根据草图生成的水彩山间小屋](docs/assets/sketch-demo-result.png) |
-
-示例要求：保留山峰与小屋的构图，生成温暖的水彩旅行插画，青绿山峰、橙色屋顶、草地小溪与柔和晨光，不保留蓝色线条。此例通过 GPT-5.6-Luna 发起一次图片工具调用，请求低质量；Luna 是对话模型，实际出图型号由订阅后端决定。
-
-<details>
-<summary>进阶展示</summary>
-
-**《画布背面有人》**
-
-**Astra 绘制草图，GPT Image 2 生成成图。** Astra 通过原生 `codex_sketch` 接口完成 6 层、427 笔绘制，再由 Luna 调用订阅生图工具精修。生图请求使用 `gpt-image-2`、低质量档；服务端未报告实际执行型号。Beta 新增 PNG 导出、分层 PSD 导入导出和可编辑草稿文件；PSD 保留像素图层，原生草稿保留笔画。草图画板与 Agent 绘图均默认关闭，可在高级设置中分别开启。仅开启 Agent 绘图后才向模型提供绘图工具。
-
-| 原生草图 | 实际生成结果 |
-| --- | --- |
-| ![Sketch](docs/assets/sketch-advanced-source.png) | ![Result](docs/assets/sketch-advanced-result.png) |
-
-**草图复现提示词（按原画面整理，非完整原始对话）**
-
-原案例由 Astra 分阶段绘制，下面提供同主题的复现起点，不保证得到完全相同的画面。
-
-```text
-@sketch 用 4:3 横版画板绘制《画布背面有人》：中央偏上是一处撕开的纸洞，洞内是深蓝星空和一位拿颜料桶的小画师；蓝色颜料从桶中流出，形成 S 形河流，流向下方城市。左侧城市保持未上色线稿，右侧城市被暖色点亮，加入纸船与飞鸟。按纸面、洞内世界、颜料河流、城市、画师和细节分层绘制，保留原生可编辑笔画。
-```
-
-**实际生图提示词**
-
-```text
-请基于本条附加草图实际调用订阅图片工具一次，生成成品插画。quality=low，模型使用当前默认，不切换型号，不额外生成。主题《画布背面有人》：保留4:3横构图、中央偏上的撕纸洞口、洞内拿颜料桶的小画师、流出成为S形河流的蓝色颜料、下方左侧未上色城市与右侧被点亮城市、纸船飞鸟。精修为惊艳的立体纸艺与精细手绘结合的编辑插画，纸张纤维、真实撕边及柔和投影，深靛蓝洞内星月，丰富青蓝颜料层次和流动质感，赭橙画师与暖色建筑，微小清晰的叙事细节。不重构为风景，不添加文字水印。必须使用本条参考图片编辑，不能仅凭文字生成。生成后简短说明完成即可。
-```
-
-原案例首发：[Beta v2.1.0-beta.2](https://github.com/Pascapone/dsh-codex-subscription/releases/tag/v2.1.0-beta.2)
-
-**《蒙娜丽莎》：Astra 草图 → GPT 生图**
-
-案例版本：[2.1.0-beta.5](https://github.com/Pascapone/dsh-codex-subscription/releases/tag/v2.1.0-beta.5)
-
-用户在另一台电脑上的实际效果：先让 Astra 在竖版画板上绘制，再通过 GPT 生图转成油画。
-
-| Astra 原生草图 | GPT 生图：油画效果 |
-| --- | --- |
-| ![Astra 绘制的蒙娜丽莎草图](docs/assets/sketch-mona-lisa-source.png) | ![草图转换后的蒙娜丽莎油画](docs/assets/sketch-mona-lisa-result.png) |
-
-草图提示词：`@sketch 用竖版画板画一幅《蒙娜丽莎》`
-
-生图提示词：`帮我变成油画`
-
-</details>
-
-图片请求中的 Flare / Sunburst 型号选项仍属实验性功能。成功生成不代表订阅后端确认采用指定型号或质量；不会把请求参数当成实际返回型号。
-
-### 输入框速度
-
-选择支持的 Codex 模型后，可在输入框的模型菜单中切换标准与高速。标准模式不增加图标，
-只有高速模式会在模型名称左侧显示闪电；Spark 不显示速度入口。高速模式会提高速度，也会消耗更多 Credits；具体规则见
-[OpenAI Codex Speed 文档](https://learn.chatgpt.com/docs/agent-configuration/speed)。
-
-### 高级实验选项
-
-在 **高级与诊断** 中按需开启，默认仍使用 SSE 和 DSH 子任务：
-
-- **WebSocket**：复用连接和可复用的上下文传输；握手失败可回退 SSE，已开始的响应中断会报错，不自动重放。下次请求生效，不增加模型上下文容量，也不保证更快。
-- **Codex 独立子任务**：复用订阅登录和官方 DSH Codex 运行时，无需另行登录；可选组件在高级设置中安装。默认继承当前订阅模型及工作区权限。开启 DSH 子任务模型选择、配置允许模型并新建会话后，可在聊天中指定子任务模型与推理档位；非订阅会话需明确选择订阅模型。共享上下文的子任务仍交给 DSH。
-
-<a id="codex-subtask-runtime"></a>
-
-## 可选 Codex 子任务运行时
-
-普通订阅聊天、图片和 DSH 原生子任务不需要 Codex CLI。只有高级设置中的 **Codex 独立子任务（Beta）** 需要额外准备官方运行时，插件不会后台自动下载。
-
-在 **设置 → Codex 订阅 → 高级与诊断 → 独立子任务** 点击 **安装组件**。DSH 负责安装，页面显示当前阶段，可取消尚未应用的安装；完成后重启，再选择 Codex。安装不会自动开启子任务。
-
-![可选组件管理实机界面](docs/assets/settings-runtime-current.png)
-
-优先使用上面的 **安装组件** 按钮。此 `2.2.1` 版本会按当前 DSH 版本选择对应组件：DSH `0.1.7-rc.2` 安装组件 `0.1.7-rc.2`，DSH `0.1.5-rc.2` 安装组件 `0.1.5-rc.2`；已安装的 `0.1.5-rc.3` 组件仅在同版本宿主上识别。请不要省略组件版本号或自行改用 `@next`。
-
-<details>
-<summary>旧版宿主手动安装与离线准备</summary>
-
-插件安装页面填写与当前 DSH 相同版本的组件，例如 DSH `0.1.7-rc.2` 填写 `@deepseek-ai/dsh-subagent-codex@0.1.7-rc.2`。终端方式：
-
-```sh
-dsh plugin --profile web add @deepseek-ai/dsh-subagent-codex@0.1.7-rc.2
-```
-
-安装到订阅插件所在的同一个 profile，完成后重启。离线使用须提前在目标系统与架构上安装并验证完整运行时；只复制订阅插件或 Codex 启动脚本不够。模型请求仍需联网。
-
-</details>
-
-### 不再使用时
-
-只想停用：在高级设置切回 **DSH**，组件仍保留，之后可再次开启。
-
-要卸载：在同一位置点击 **卸载组件** 并确认。插件会检查正在运行的子任务，切回 DSH 后交给官方接口卸载；有任务运行时不能卸载。完成后重启。旧版宿主可在终端执行（将 `web` 替换为实际安装的 profile）：
-
-```sh
-dsh plugin --profile web remove @deepseek-ai/dsh-subagent-codex
-```
-
-卸载的是可选子任务组件，不是订阅插件；普通订阅聊天、生图和 DSH 原生子任务不受影响。若其他插件仍依赖该组件，包管理器可能保留它。
-
-### 存储与清理
-
-卸载不等于清空共享安装缓存，也不能保证释放某个固定大小。安装缓存由 DSH／Portable 统一管理，本插件不直接删除共享目录。草稿、会话记录、生成原图和登录信息不是安装缓存；需要删除时应使用各自的管理入口，不做一键混合清理。
 
 ## 更新与卸载
 
@@ -314,10 +325,52 @@ dsh plugin --profile web remove @pascapone/dsh-codex-subscription
 
 ## 常见问题
 
-- **`dsh` 无法识别**：直接使用 DSH 的插件页面安装，无需为了安装插件配置终端命令。
-- **电脑上有多个 DSH**：请从目标 DSH 环境运行标准命令，由该产品自身选择对应 profile；
-- **安装仍然失败**：确认命令是在目标 DSH 环境中运行，不要删除 profile 或随意修改系统 PATH。
-- **需要提交问题**：在设置页底部生成“支持诊断”，然后打开[使用问题表单](https://github.com/Pascapone/dsh-codex-subscription/issues/new?template=install-problem.yml)。报告包含系统/运行时、有限的登录阶段和安全的请求失败分类，但不含凭据、账号标识、原始响应或完整日志；请粘贴到必填诊断栏，且不要附上登录链接、授权码或浏览器回调地址。
+<details>
+<summary>DSH 0.2.0-rc.2 提示插件不兼容？</summary>
+
+2.2.10 之前的所有版本发布时 DSH 0.2.0-rc.2 还不存在，其兼容声明无法事后修改。请安装 2.2.10 或更高版本（只填包名时，发布满 24 小时前可能装到旧版，请直接填 `@pascapone/dsh-codex-subscription@2.2.10`）：在 **插件** 页面更新，或运行 `dsh plugin --profile web update @pascapone/dsh-codex-subscription`，然后重启 DSH。
+
+</details>
+
+<details>
+<summary>电脑没有 dsh 命令，怎么安装？</summary>
+
+直接使用 DSH 的 **插件 → 添加插件**，粘贴包名即可，无需配置终端命令。
+
+</details>
+
+<details>
+<summary>有多个 DSH，或安装后找不到插件？</summary>
+
+在你实际使用的 DSH 中安装。使用终端时，请从目标 DSH 环境运行命令，并确认对应的 profile；不要删除 profile 或修改系统 PATH 来强行安装。
+
+</details>
+
+<details>
+<summary>如何反馈问题？</summary>
+
+在 **设置 → Codex 订阅 → 维护** 生成“支持诊断”，粘贴到[使用问题表单](https://github.com/Pascapone/dsh-codex-subscription/issues/new?template=install-problem.yml)的诊断栏，并补充触发步骤。
+
+诊断不含凭据、账号标识、原始响应或完整日志。请勿附上登录链接、授权码或浏览器回调地址。
+
+</details>
+
+## 当前图标
+
+这是当前使用的插件图标，以及它在 DSH「已安装」列表中的实际显示效果。
+
+<p align="center"><img src="icon-subscription.webp" width="200" height="200" alt="当前 Codex 订阅插件图标"></p>
+
+<p align="center"><img src="docs/assets/plugin-installed.png" width="800" alt="DSH 已安装列表中的 Codex 订阅插件卡片"></p>
+
+<sub>DSH 0.1.7-alpha.2 实机界面。</sub>
+
+## 定位与边界
+
+- **只做 ChatGPT / Codex 订阅**，并把这一件事做深：额度与预测、图片与草图、子任务、诊断；不接入 Claude、Grok 等其他订阅。
+- **失败就明确报错**：不会静默切换到其他付费路由，也不会虚构账号没有返回的额度窗口。
+- **兼容：** 上游验收记录覆盖其稳定版本，此 Fork 另保留 DSH `0.2.1-alpha.1`；本地自动检查不等同于账号或界面实机验收。
+- 模型、额度和功能开放情况以你的账号实际返回为准；ChatGPT 后端与 DSH 可能独立变化。
 
 ## 边界与支持
 
@@ -332,3 +385,7 @@ DSH 插件交流可前往 [DeepSeek Harness Discussions](https://github.com/deep
 如果这个项目对你有帮助，[点一下 Star](https://github.com/Pascapone/dsh-codex-subscription/stargazers) 可以让更多 DSH 用户发现它。
 
 [MIT](LICENSE)
+
+## 分支控制与上下文默认值
+
+本分支保留 Codex 推理滑块与运行中的确认选项（Standard / Fast）、新子任务首个请求前的速度配置，以及 GPT-6.1 Sol 的 500000 Token 默认值。目录刷新前保留 GPT-6.1 Sol、Sol、Luna 离线元数据；成功读取的账号目录决定模型可用性，离线元数据不授予服务器访问权限。支持目录提供的 Ultrafast（空闲会话）、模型显隐和新会话默认模型。其他语音插件优先占用麦克风活动槽。

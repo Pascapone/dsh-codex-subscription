@@ -7,7 +7,6 @@ export declare const IMAGE_FEATURE_DEFAULTS: Readonly<{
     imageAnnotations: true;
     imageSketch: false;
     imageSketchAgent: false;
-    imageSketchAgentPreview: false;
 }>;
 export declare function readImageFeatures(value?: Record<string, unknown> | null): ImageFeatures;
 export declare function readImageDefaults(value?: Record<string, unknown> | null): ImageDefaults;

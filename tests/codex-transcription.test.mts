@@ -13,7 +13,7 @@ test('Codex transcription reuses OAuth and sends browser recording as multipart 
   let request!: {url: unknown; init: CapturedInit}
   const transcribe = createCodexTranscriptionProvider((({
     getAuth: async () => ({ auth: { apiKey: 'secret' } }),
-    readCredential: async () => ({ type: 'oauth', accountId: 'account' }),
+    readCredential: async () => ({ type: 'oauth', access: 'secret', accountId: 'account' }),
     fetch: async (url: unknown, init: CapturedInit) => { request = { url, init }; return new Response(JSON.stringify({ text: '  hello  ' })) },
   }) as unknown as Parameters<typeof createCodexTranscriptionProvider>[0]))
   const result = await transcribe(input, new AbortController().signal)
@@ -61,7 +61,7 @@ test('OAuth failures and provider responses do not leak server error bodies', as
   const access = `header.${Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'jwt-account' } })).toString('base64url')}.signature`
   const failed = createCodexTranscriptionProvider((({
     getAuth: async () => ({ auth: { apiKey: access } }),
-    readCredential: async () => ({ type: 'oauth' }),
+    readCredential: async () => ({ type: 'oauth', access }),
     fetch: async (_url: unknown, init: CapturedInit) => { headers = init.headers; return new Response('private server response', { status: 401 }) },
   }) as unknown as Parameters<typeof createCodexTranscriptionProvider>[0]))
   await assert.rejects(failed(input, new AbortController().signal), /sign-in needs to be renewed/)

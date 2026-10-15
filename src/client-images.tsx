@@ -1,3 +1,4 @@
+
 import type { ToolCallBlock, ToolResultNode } from '@deepseek-ai/dsh-client-ui-conversation/client';
 import type { ImageClientProps, ImagePresentationAttachment } from './image-client-types.js';
 import type { OriginalImageRef } from './image-original-contract.js';
@@ -8,6 +9,7 @@ declare module '@deepseek-ai/dsh-client-ui-chat/client' {
   interface ChatNodeDataMap { 'codex-image-output': { blocks: ImageBlock[] } }
 }
 import { PhotoIcon, ArrowPathIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline'
+import { officialImageTools } from './image-official-tools.js'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { buildImageEditDraft } from './image-edit.js'
 import { decodeImagePresentation } from './image-original-contract.js'
@@ -81,7 +83,7 @@ function CodexGeneratedImage({ attachment, original, rpc, sessionId, loadImage, 
               sourceName, referenceName,
             }), annotations, referenceName)
           },
-        }, ...(features.imageSketch && openSketchImage ? [{id:'sketch',label:t('imageToSketch'),pendingLabel:t('imageEditPreparing'),errorLabel:t('imageEditFailed'),onInvoke:()=>openSketchImage(src,downloadName)}] : [])],
+        }, ...officialImageTools({ src, name: downloadName, t, attachForEdit }), ...(features.imageSketch && openSketchImage ? [{id:'sketch',label:t('imageToSketch'),pendingLabel:t('imageEditPreparing'),errorLabel:t('imageEditFailed'),onInvoke:()=>openSketchImage(src,downloadName)}] : [])],
       }],
       opener: triggerRef.current,
       source: 'codex-generated',
@@ -113,6 +115,7 @@ export function CodexImageToolRow({ presentation = 'tool', block, sessionId, rpc
   const error = failed
     ? block!.content!.find((item): item is Extract<ToolResultNode['content'][number], { type: 'text' }> => item?.type === 'text' && typeof item.text === 'string')?.text
     : undefined
+  const meta = block?.meta as { requestedModel?: unknown; reportedModel?: unknown; requestedSize?: unknown } | undefined
   const original = decodeImagePresentation(block?.meta)?.original
   const showOutput = presentation === 'output'
   const StateIcon = !settled ? ArrowPathIcon : failed ? ExclamationCircleIcon : PhotoIcon

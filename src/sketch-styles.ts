@@ -1,4 +1,5 @@
 export const SKETCH_CSS = `
+
 .codexSketchSizeModes{display:flex;flex-direction:column;gap:3px}.codexSketchSizeModes button{font-size:11px;padding:4px 6px;border-radius:10px;color:var(--sketch-muted)}.codexSketchSizeModes button[aria-pressed=true]{background:var(--sketch-line);color:var(--sketch-fg)}
 
 .codexSketchSizeControl{position:absolute;left:10px;top:50%;transform:translateY(-50%);z-index:2;display:flex;flex-direction:column;align-items:center;gap:10px;padding:12px 6px;border:1px solid var(--sketch-line);border-radius:24px;background:var(--sketch-glass);backdrop-filter:blur(18px);box-shadow:0 3px 14px #0001}

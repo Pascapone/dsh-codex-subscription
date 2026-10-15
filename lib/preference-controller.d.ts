@@ -2,12 +2,15 @@ import type { createSubscriptionRpcClient } from './rpc-contract.js';
 import type { ContextModelDescriptor, PreferenceScope, PreferenceValue } from './preference-types.js';
 export declare function createPreferenceController(scope: PreferenceScope, rpc: Pick<ReturnType<typeof createSubscriptionRpcClient>, 'call'>): {
     getSnapshot: () => Readonly<{
-        connectionMode: string;
-        compactionMode: string;
+        autoQuotaRetryAvailable: boolean;
+        autoQuotaRetry: boolean;
+        connectionMode: "websocket" | "sse";
+        reviewModel: "session" | "official";
+        compactionMode: "dsh" | "cloud";
         codexBasePrompt: boolean;
         codexModelPicker: boolean;
         runtimeOptions: boolean;
-        subagentBackend: string;
+        subagentBackend: "dsh" | "codex";
         subagentBackendAvailable: boolean;
         subagentRuntimeInstalled: boolean;
         quickQuotaMode: import("./settings-types.js").QuickQuotaMode;
@@ -17,15 +20,26 @@ export declare function createPreferenceController(scope: PreferenceScope, rpc: 
             [x: string]: unknown;
         };
         outputVerbosity: import("./settings-types.js").OutputVerbosity;
+        inputImageDetail: string;
+        streamIdleTimeoutMinutes: number;
         contextMode: import("./settings-types.js").ContextMode;
         customContextWindow: number;
         customContextWindows: {
             [x: string]: number;
         };
         contextModels: ContextModelDescriptor[];
+        availableModels: {
+            id: string;
+            name: string;
+        }[];
+        disabledModels: string[];
         verbosityModels: string[];
         fastModels: string[] | undefined;
-        catalogStatus: unknown;
+        ultrafastModels: string[];
+        catalogStatus: {
+            source: string;
+            refresh: string;
+        } | undefined;
         modelsLoading: boolean;
         modelError: boolean;
         writable: boolean;
@@ -38,7 +52,6 @@ export declare function createPreferenceController(scope: PreferenceScope, rpc: 
         imageAnnotations: boolean;
         imageSketch: boolean;
         imageSketchAgent: boolean;
-        imageSketchAgentPreview: boolean;
         imageModel: import("./settings-types.js").ImageModel;
         imageQuality: import("./settings-types.js").ImageQuality;
         quotaShortThreshold: number;
@@ -48,7 +61,7 @@ export declare function createPreferenceController(scope: PreferenceScope, rpc: 
         searchDomains: string[];
         quotaAlerts: import("./settings-types.js").QuotaAlertMode;
         transcriptionEnabled: boolean;
-        status: "ready" | "loading" | "unavailable";
+        status: "ready" | "unavailable" | "loading";
     }>;
     subscribe: (listener: () => void) => () => boolean;
     load: () => Promise<void>;

@@ -1,0 +1,20 @@
+export type DiagnosticCheck = { id: string; capability: string; source: string; scope: string; status: string; reason: string; observedAt: number; elapsedMs?: number };
+export type CheckResult = Pick<DiagnosticCheck, 'status' | 'reason'>;
+export type CheckDefinition = Pick<DiagnosticCheck, 'id' | 'capability'> & { run?: (signal: AbortSignal) => CheckResult | Promise<CheckResult> };
+export type DiagnosticEvent = { capability?: string; action: string; source: string; status: string; observedAt: number; sequence?: number };
+export type OperationHistory = { events: DiagnosticEvent[]; dropped?: number; capacity?: number; scope?: string };
+export type NetworkEvent = { area: string; status: string; observedAt: number; sequence: number; code?: string; httpStatus?: number };
+export type NetworkHistory = { events: NetworkEvent[]; dropped?: number; capacity?: number; scope?: string };
+export type CapabilityCoverage = { id: string; readiness: string; reason: string; blockedBy?: string; execution: string; checks: string[]; latest?: DiagnosticEvent; unresolved?: DiagnosticEvent[] };
+export type DiagnosticFinding = { code: string; severity: string; next: string; evidence: (string | DiagnosticEvent)[] };
+export type DiagnosticReport = {
+  version?: string; generatedAt?: string;
+  account?: { status: string };
+  runtime?: { dsh?: string; platform: string; arch: string };
+  catalog?: { source?: string; refresh?: string; unsupported?: unknown[] };
+  configuration?: Record<string, unknown>;
+  inspection?: { meaning?: string; checks: DiagnosticCheck[]; capabilities: CapabilityCoverage[] };
+  operations?: OperationHistory; requestHistory?: NetworkHistory;
+  client?: { status?: string; version?: string; checks?: DiagnosticCheck[]; topology?: unknown[]; truncated?: boolean };
+  summary?: { scope: string; findings: DiagnosticFinding[]; unverified: number };
+};

@@ -1,3 +1,4 @@
+
 import type { CredentialInfo, OAuthCredential } from '@earendil-works/pi-ai';
 import type { CredentialKey, CredentialRef, GrantRecord } from '@deepseek-ai/dsh-credentials';
 import type { SafeOAuthCredential, VaultPayload, PublicAccount, VaultCredentials, VaultOptions, CredentialMutation } from './auth-types.js';
@@ -102,7 +103,7 @@ function assertVaultRecord(input: unknown): VaultPayload {
   return {
     version: VERSION,
     activeId: record.payload.activeId,
-    legacyAccountId: legacyAccountId as string | undefined,
+    ...(legacyAccountId === undefined ? {} : { legacyAccountId: legacyAccountId as string }),
     accounts,
   }
 }
@@ -326,10 +327,11 @@ export class DshOAuthAccountVault {
         if (!current.accounts.some(account => account.id === id)) throw new Error('Unknown Codex account')
         if (current.accounts.length === 1) throw new Error('Cannot remove the last account; sign out instead')
         const accounts = current.accounts.filter(account => account.id !== id)
+        const { legacyAccountId, ...rest } = current
         return {
-          ...current,
+          ...rest,
           activeId: current.activeId === id ? accounts[0].id : current.activeId,
-          legacyAccountId: current.legacyAccountId === id ? undefined : current.legacyAccountId,
+          ...(legacyAccountId === undefined || legacyAccountId === id ? {} : { legacyAccountId: legacyAccountId as string }),
           accounts,
         }
       })

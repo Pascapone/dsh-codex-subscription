@@ -1,3 +1,4 @@
+
 import type { CodexUiProps, PreferenceState } from './client-types.js';
 import type { ComponentProps, ReactNode } from 'react';
 import { useEffect, useId, useState } from 'react'
@@ -6,11 +7,12 @@ import { ImagePreferences } from './image-preferences.js'
 import { PreferencesCard } from './client-preferences.js'
 import { AccountCard, AccountFailureCard } from './client-account.js'
 import { DiagnosticsCard } from './client-diagnostics.js'
+import { StorageCard } from './client-storage.js'
 import { UsageCard } from './client-usage.js'
-export function CodexSection({ preference, rpc, accountStatus, t }: CodexUiProps) {
+export function CodexSection({ preference, rpc, accountStatus, t, diagnostics, defaultModel }: CodexUiProps) {
   const [tab, setTab] = useState('account')
   const id = useId()
-  const tabs = ['account', 'advanced']
+  const tabs = ['account', 'advanced', 'creative', 'maintenance']
   const accountSnapshot = useAccountStatusSnapshot(accountStatus)
   const account = accountSnapshot.account
   const [resetKey, setResetKey] = useState(0)
@@ -38,6 +40,13 @@ export function CodexSection({ preference, rpc, accountStatus, t }: CodexUiProps
     {account === undefined ? null : <UsageCard key={resetKey} rpc={rpc} t={t} signedIn={account.authenticated === true} resetKey={resetKey} preference={preference} />}
     <PreferencesCard rpc={rpc} preference={preference} t={t} />
     </div>
-    <div role="tabpanel" id={`${id}-advanced`} aria-labelledby={`${id}-advanced-tab`} hidden={tab !== 'advanced'}><PreferencesCard rpc={rpc} preference={preference} t={t} section="advanced" /><ImagePreferences preference={preference} t={t} /><DiagnosticsCard rpc={rpc} t={t} /></div>
+    <div role="tabpanel" id={`${id}-advanced`} aria-labelledby={`${id}-advanced-tab`} hidden={tab !== 'advanced'}><PreferencesCard rpc={rpc} preference={preference} t={t} defaultModel={defaultModel} section="advanced" /></div>
+    <div role="tabpanel" id={`${id}-creative`} aria-labelledby={`${id}-creative-tab`} hidden={tab !== 'creative'}>
+      <ImagePreferences preference={preference} t={t} />
+      <ImagePreferences preference={preference} t={t} section="sketch" />
+    </div>
+    <div role="tabpanel" id={`${id}-maintenance`} aria-labelledby={`${id}-maintenance-tab`} hidden={tab !== 'maintenance'}>
+      <StorageCard rpc={rpc} t={t} /><DiagnosticsCard rpc={rpc} t={t} diagnostics={diagnostics} />
+    </div>
   </section>
 }

@@ -12,7 +12,7 @@ test('typed catalog and quota boundaries reject malformed JSON while preserving 
   assert.deepEqual(models[0].input, ['text']);
   assert.equal(models[0].supportsFast, true);
   assert.equal(models[0].thinkingLevelMap.low, 'low');
-  assert.equal(createOfficialModelCatalog().getModels(openaiCodexProvider().getModels()).some(model => model.id === 'gpt-6.1-sol'), true);
+  assert.equal(createOfficialModelCatalog().getModels(openaiCodexProvider().getModels()).find(model => model.id === 'gpt-6.1-sol')?.contextWindow, 500_000);
   for (const value of [null, [], { rate_limit: { primary_window: { used_percent: '1', limit_window_seconds: 1 } } }, { rate_limit_reset_credits: { available_count: -1 } }]) assert.throws(() => parseCodexUsage(value));
   const usage = parseCodexUsage({ rate_limit: { primary_window: { used_percent: 12.3456, limit_window_seconds: 18000 } }, rate_limit_reset_credits: { available_count: 1, credits: [{ status: 1 }, { status: 'available', title: 'Credit' }] } });
   assert.equal(usage.rateLimits[0].windows[0].usedPercent, 12.3456);

@@ -1,3 +1,4 @@
+
 import type { ModelSelectInjected } from '@deepseek-ai/dsh-client-ui-model-selection/client';
 import type { CodexUiProps } from './client-types.js';
 import type { ReactNode } from 'react';
@@ -8,7 +9,7 @@ import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } fro
 import { createPortal } from 'react-dom'
 import { ArrowPathIcon, BoltIcon, CheckIcon as IconCheckOutline16, ChevronDownIcon as IconChevronDownOutline14, ChevronLeftIcon as IconChevronLeftOutline14, ChevronRightIcon as IconChevronRightOutline14, XMarkIcon as IconCloseOutline16 } from '@heroicons/react/16/solid'
 import { CHANNEL, unwrap } from './rpc-contract.js'
-import { OUTPUT_VERBOSITY_DEFAULT, OUTPUT_VERBOSITY_FIELD, OUTPUT_VERBOSITY_HIGH, OUTPUT_VERBOSITY_LOW, OUTPUT_VERBOSITY_MEDIUM, SPEED_MODE_FAST, SPEED_MODE_STANDARD, supportsCodexFastMode } from './settings-contract.js'
+import { OUTPUT_VERBOSITY_DEFAULT, OUTPUT_VERBOSITY_FIELD, OUTPUT_VERBOSITY_HIGH, OUTPUT_VERBOSITY_LOW, OUTPUT_VERBOSITY_MEDIUM, SPEED_MODE_FAST, SPEED_MODE_ULTRAFAST, SPEED_MODE_STANDARD, supportsCodexFastMode } from './settings-contract.js'
 import { fill, usePreferenceSnapshot } from './client-shared.js'
 export function CodexModelSelect({ locked, available, directory, load, select, preference, rpc, sessionId, useSession, runtime = false, t }: ModelProps) {
   const running = useSession(snapshot => snapshot.running)
@@ -38,6 +39,11 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
       ...(model.reasoning?.defaultEffort === undefined ? {} : { reasoningEffort: model.reasoning.defaultEffort }),
     },
   }))), [groups])
+  const visibleGroups = useMemo(() => {
+    const hidden = new Set(preferenceSnapshot.disabledModels)
+    return groups.map(group => ({ ...group, models: group.models.filter(model => !hidden.has(model.id)), allHidden: group.models.length > 0 && group.models.every(model => hidden.has(model.id)) }))
+      .filter(group => group.models.length > 0 || group.allHidden)
+  }, [groups, preferenceSnapshot.disabledModels])
   const currentChoice = choices.find(choice => choice.selection.provider === state.current?.provider && choice.selection.model === state.current?.model)
   const reasoning = currentChoice?.model.reasoning
   const effectiveEffort = state.current?.reasoningEffort ?? reasoning?.defaultEffort
@@ -59,6 +65,9 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
   const modelLabel = currentChoice?.model.name ?? t('selectModel')
   const speedSupported = state.current?.provider === 'openai-codex' && (preferenceSnapshot.fastModels?.includes(state.current?.model) ?? supportsCodexFastMode(state.current?.model))
   const speedWritable = preferenceSnapshot.status === 'ready' && preferenceSnapshot.writable === true
+  const ultrafastSupported = state.current?.provider === 'openai-codex' && preferenceSnapshot.ultrafastModels.includes(state.current.model)
+  const ultrafast = ultrafastSupported && preferenceSnapshot.sessionSpeedModes?.[sessionId] === SPEED_MODE_ULTRAFAST
+  const speedAvailable = speedSupported || ultrafastSupported
   const fast = speedSupported && preferenceSnapshot.sessionSpeedModes?.[sessionId] === SPEED_MODE_FAST
   const verbositySupported = state.current?.provider === 'openai-codex' && preferenceSnapshot.verbosityModels.includes(state.current?.model)
   const verbosityWritable = preferenceSnapshot.status === 'ready' && preferenceSnapshot.writable === true
@@ -200,8 +209,9 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
       {state.status === 'loading' ? <div className="codexModelSelectStatus">{t('modelsLoading')}</div> : null}
       {state.error === null ? null : <div className="codexModelSelectError"><span>{fill(t('modelFailed'), { value: state.error })}</span><button className="codexModelSelectRetry" type="button" onClick={load}>{t('modelRetry')}</button></div>}
       {state.failures.filter(failure => failure.id === 'openai-codex').map(failure => <div className="codexModelSelectWarning" key={failure.id}>{fill(t('groupFailed'), { name: failure.name, value: failure.message })}</div>)}
-      <div className="codexModelSelectGroups scrollable">{groups.map(group => <section className="codexModelSelectGroup" role="group" aria-labelledby={`${id}-${group.id}`} key={group.id}>
+      <div className="codexModelSelectGroups scrollable">{visibleGroups.map(group => <section className="codexModelSelectGroup" role="group" aria-labelledby={`${id}-${group.id}`} key={group.id}>
         <div className="codexModelSelectGroupTitle" id={`${id}-${group.id}`}>{group.name}</div>
+        {group.allHidden === true ? <div className="codexModelSelectEmpty">{t('modelsHidden')}</div> : null}
         {group.models.map(model => option({
           key: model.id,
           label: model.name,
@@ -211,7 +221,7 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
           onClick: () => chooseModel(choices.find(choice => choice.model.id === model.id)!.selection),
         }))}
       </section>)}</div>
-      {state.status === 'ready' && choices.length === 0 ? <div className="codexModelSelectEmpty">{t('modelsEmpty')}</div> : null}
+      {state.status === 'ready' && visibleGroups.length === 0 ? <div className="codexModelSelectEmpty">{t(choices.length === 0 ? 'modelsEmpty' : 'modelsHidden')}</div> : null}
     </div>
   } else if (pane === 'verbosity') {
     submenu = <div className="codexModelSelectPane">
@@ -242,6 +252,7 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
         </div>
         {runtime ? <span className="codexEffortRunHint">{t('runOptions')}</span> : null}
       </div>
+      {ultrafastSupported && !runtime ? <button type="button" className="codexModelSelectCell" role="switch" aria-checked={ultrafast} disabled={!speedWritable || busy || running} onClick={() => { void preference.setSpeed(sessionId, ultrafast ? SPEED_MODE_STANDARD : SPEED_MODE_ULTRAFAST) }}>{t('speedUltrafast')}</button> : null}
       {verbositySupported && !runtime && cell('verbosity', t('verbosityTitle'), verbosityLabel)}
       {state.error || preferenceSnapshot.error ? <div className="codexModelSelectError" role="alert"><span>{state.error ?? t('preferenceFailed')}</span><button className="codexModelSelectRetry" type="button" onClick={load}>{t('modelRetry')}</button></div> : null}
     </> : <>
@@ -274,7 +285,7 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
       disabled={runtime ? busy || !speedWritable : locked || running || busy}
       onClick={() => open ? close() : (setPane('root'), setOpen(true), load())}
     >
-      {fast && <BoltIcon className="codexModelSelectBolt" aria-hidden="true" />}
+      {(fast || ultrafast) && <BoltIcon className="codexModelSelectBolt" aria-hidden="true" />}
       <span className="codexModelSelectLabel">{modelLabel}</span>
       {effortLabel === undefined ? null : <span className="codexModelSelectEffort">{effortLabel}</span>}
       <IconChevronDownOutline14 className="codexModelSelectChevron" />
@@ -293,4 +304,3 @@ export function CodexModelSelect({ locked, available, directory, load, select, p
     </dialog> : null}
   </div>
 }
-

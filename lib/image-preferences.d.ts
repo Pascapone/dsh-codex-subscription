@@ -10,4 +10,6 @@ export declare function ImageChoice({ label, hint, value, text, items, disabled,
     disabled: boolean;
     onSelect(id: string): void;
 }): import("react/jsx-runtime").JSX.Element;
-export declare function ImagePreferences({ preference, t }: Pick<CodexUiProps, 'preference' | 't'>): import("react/jsx-runtime").JSX.Element;
+export declare function ImagePreferences({ preference, t, section }: Pick<CodexUiProps, 'preference' | 't'> & {
+    section?: 'image' | 'sketch';
+}): import("react/jsx-runtime").JSX.Element;

@@ -2,7 +2,7 @@ type FixtureEntry = {options: {name: string}; fiber: {config: Record<string, unk
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createSubagentTokens } from '../src/subagent-auth.js'
-import { createSubagentBackendSwitcher, SUBAGENT_PROVIDER, subagentThreadPolicy } from '../src/subagent-backend.js'
+import { createSubagentBackendSwitcher, presetEntries, SUBAGENT_PROVIDER, subagentThreadPolicy } from '../src/subagent-backend.js'
 
 test('subscription subagent pins account and serializes concurrent token rotation', async () => {
   let current = { type: 'oauth', accountId: 'a', access: 'old' }
@@ -21,12 +21,13 @@ test('subscription subagent pins account and serializes concurrent token rotatio
   await assert.rejects(tokens('b'), /authorization failed/)
 })
 
+const childFeatures = Object.fromEntries(['apps', 'plugins', 'plugin_sharing', 'remote_plugin', 'tool_suggest', 'browser_use', 'browser_use_external', 'browser_use_full_cdp_access', 'computer_use', 'in_app_browser'].map(name => [name, false]))
 test('subagent policy takes parent model effort and sandbox, never user Codex defaults', () => {
   assert.deepEqual(subagentThreadPolicy((({ session: { requestHeader: () => ({ config: {
     provider: 'openai-codex', model: 'gpt-5.6-luna', reasoningEffort: 'max',
   } }) } }) as unknown as Parameters<typeof subagentThreadPolicy>[0]), (({ mode: 'read-only' }) as unknown as Parameters<typeof subagentThreadPolicy>[1])), {
     model: 'gpt-5.6-luna', modelProvider: 'openai', approvalPolicy: 'never', sandbox: 'read-only',
-    config: { model_reasoning_effort: 'max' },
+    config: { features: childFeatures, model_reasoning_effort: 'max' },
   })
   assert.throws(() => subagentThreadPolicy((({}) as unknown as Parameters<typeof subagentThreadPolicy>[0]), (({}) as unknown as Parameters<typeof subagentThreadPolicy>[1])), /sandbox/)
 })
@@ -43,7 +44,7 @@ test('explicit child route overrides inheritance without silently changing effor
   assert.equal(chosen.model, 'gpt-5.6-luna')
   assert.equal(chosen.config.model_reasoning_effort, 'low')
   assert.equal(chosen.sandbox, 'read-only')
-  assert.deepEqual(subagentThreadPolicy(((parent) as unknown as Parameters<typeof subagentThreadPolicy>[0]),((policy) as unknown as Parameters<typeof subagentThreadPolicy>[1]),(({model:'gpt-5.6-luna'}) as unknown as Parameters<typeof subagentThreadPolicy>[2])).config,{})
+  assert.deepEqual(subagentThreadPolicy(((parent) as unknown as Parameters<typeof subagentThreadPolicy>[0]),((policy) as unknown as Parameters<typeof subagentThreadPolicy>[1]),(({model:'gpt-5.6-luna'}) as unknown as Parameters<typeof subagentThreadPolicy>[2])).config,{features: childFeatures})
   const other = {session:{requestHeader:()=>({config:{provider:'deepseek',model:'deepseek'}})}}
   assert.throws(()=>subagentThreadPolicy(((other) as unknown as Parameters<typeof subagentThreadPolicy>[0]),((policy) as unknown as Parameters<typeof subagentThreadPolicy>[1])), /Select an openai-codex model/)
   assert.equal(subagentThreadPolicy(((other) as unknown as Parameters<typeof subagentThreadPolicy>[0]),((policy) as unknown as Parameters<typeof subagentThreadPolicy>[1]),(({provider:'openai-codex',model:'gpt-5.6-luna'}) as unknown as Parameters<typeof subagentThreadPolicy>[2])).model,'gpt-5.6-luna')
@@ -83,4 +84,29 @@ test('web preset tools mounted after selection receive the chosen backend', asyn
   await switcher.select('dsh')
   assert.equal(mounted.fiber.config.provider, 'spawn')
   await switcher.dispose()
+})
+
+test('backend restoration preserves edits made while Codex is selected', async () => {
+  const spawn = entry('spawn', { toolName: 'before', maxDepth: 2 })
+  const switcher = createSubagentBackendSwitcher({ entries: () => [spawn], prepare: async () => {} })
+  await switcher.select('codex')
+  spawn.fiber.config.toolName = 'after'
+  spawn.fiber.config.maxDepth = 7
+  await switcher.select('dsh')
+  assert.equal(spawn.fiber.config.toolName, 'after')
+  assert.equal(spawn.fiber.config.maxDepth, 7)
+  await switcher.select('codex')
+  spawn.fiber.config.toolName = 'latest'
+  await switcher.dispose()
+  assert.equal(spawn.fiber.config.toolName, 'latest')
+  assert.equal(spawn.fiber.config.maxDepth, 7)
+})
+
+test('preset rows mounted by the DSH 0.2 registry are found, and a host without it yields none', () => {
+  const rows = [{ options: { name: '@deepseek-ai/dsh-tool-subagent' } }, { options: { name: 'other' } }]
+  const ctx = { get: (name: string) => name === 'agentPresets' ? { generations: new Map([['a', { mount: { tree: { entries: () => rows } } }], ['b', {}]]) } : undefined }
+  assert.deepEqual(presetEntries(ctx as unknown as Parameters<typeof presetEntries>[0]), rows)
+  assert.deepEqual(presetEntries({ get: () => undefined } as unknown as Parameters<typeof presetEntries>[0]), [])
+  assert.deepEqual(presetEntries({ get: () => { throw new Error('boom') } } as unknown as Parameters<typeof presetEntries>[0]), [])
+  assert.deepEqual(presetEntries({} as unknown as Parameters<typeof presetEntries>[0]), [])
 })

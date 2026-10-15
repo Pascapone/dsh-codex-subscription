@@ -1,3 +1,4 @@
+
 import type { SketchRenderEntry } from './sketch-render-types.js';
 import type { SketchDocument, SketchDraft, SketchDraftMetadata } from './sketch-types.js';
 import type { SketchSessionState } from './sketch-session-state.js';
@@ -109,11 +110,8 @@ export function createSketchDocumentLifecycle(
     await decodeImages((row as SketchDraft).doc, decoded)
     replace((row as SketchDraft).doc, decoded, { id: row.id, name: (row as SketchDraft).name })
   }
-  const importImage = async (file: File) => {
-    if (
-      file.name?.toLowerCase().endsWith('.psd') ||
-      file.name?.toLowerCase().endsWith('.dsh-sketch.json')
-    ) {
+  const importImage = async (file: File, { visible = true } = {}) => {
+    if (file.name?.toLowerCase().endsWith('.psd') || file.name?.toLowerCase().endsWith('.dsh-sketch.json')) {
       if (file.size > 32 * 1024 * 1024) throw Error('File exceeds 32 MB')
       const next = file.name.toLowerCase().endsWith('.psd')
         ? await importSketchPsd(file)
@@ -136,7 +134,7 @@ export function createSketchDocumentLifecycle(
     const layer = {
       id: doc.current.nextId,
       name: file.name?.slice(0, 40) || t('sketchImport'),
-      visible: true,
+      visible,
       strokes: [],
       image: {
         src: image.src,
@@ -151,7 +149,7 @@ export function createSketchDocumentLifecycle(
     doc.current = {
       ...doc.current,
       nextId: layer.id + 1,
-      active: layer.id,
+      active: visible ? layer.id : doc.current.active,
       layers: [...doc.current.layers, layer]
     }
     schedule()

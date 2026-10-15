@@ -1,0 +1,22 @@
+import type { ComponentProps, Dispatch, SetStateAction } from 'react';
+import type { SketchStroke } from './sketch-types.js';
+import type { Selection, TextEdit } from './sketch-studio.js';
+import { SketchToolPicker } from './sketch-tool-picker.js';
+import { SketchViewControls } from './sketch-view.js';
+export declare function SketchControls({ t, navigation, picturesOpen, setPicturesOpen, disabled, tool, brush, chooseBrush, chooseTool, shapesOpen, setShapesOpen, fillShape, setFillShape, selected, editObject, selection, setTextEdit, stability, setStability, eraser, setEraser, color, pickColor }: ComponentProps<typeof SketchToolPicker> & {
+    navigation: ComponentProps<typeof SketchViewControls>['navigation'];
+    picturesOpen: boolean;
+    setPicturesOpen: Dispatch<SetStateAction<boolean>>;
+    fillShape: boolean;
+    setFillShape: Dispatch<SetStateAction<boolean>>;
+    selected?: SketchStroke;
+    editObject(patch: Partial<SketchStroke>, action?: string): void;
+    selection: Selection | null;
+    setTextEdit: Dispatch<SetStateAction<TextEdit | null>>;
+    stability: number;
+    setStability: Dispatch<SetStateAction<number>>;
+    eraser: string;
+    setEraser: Dispatch<SetStateAction<string>>;
+    color: string;
+    pickColor(color: string): void;
+}): import("react/jsx-runtime").JSX.Element;

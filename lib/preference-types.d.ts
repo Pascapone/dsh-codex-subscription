@@ -13,5 +13,8 @@ export type PreferenceWireView = PreferenceValue & {
     contextModels?: unknown;
     verbosityModels?: unknown;
     fastModels?: unknown;
-    catalogStatus?: unknown;
+    catalogStatus?: {
+        source: string;
+        refresh: string;
+    };
 };

@@ -1,5 +1,7 @@
 # Subscription capability audit — 2026-09-22
 
+> Historical audit. The 2.5.9 fork removes the bundled model fallback; the findings below describe the earlier baseline.
+
 Read-only review against current source and official documentation. This is a research backlog, not a claim of newly implemented or account-validated capabilities.
 
 ## Current versions

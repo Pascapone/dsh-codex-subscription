@@ -1,3 +1,4 @@
+
 import type { SketchPoint, SketchStroke, SketchDocument, SketchTransform, SketchGesture, SketchCommand } from './sketch-types.js';
 // Versioned tips preserve the appearance of existing drafts. Grain is generated
 // once per color, never randomly during painting (or PNG/PSD export).

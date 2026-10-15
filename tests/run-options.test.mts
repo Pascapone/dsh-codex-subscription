@@ -192,3 +192,12 @@ test('fresh child speed is ready for its first request and failed-start preferen
   f.cleanup();
   assert.equal(f.hooks.size, 0);
 });
+
+
+test('idle Ultrafast remains session-local when resolving the provider speed', () => {
+  const f = fixture();
+  f.values.sessionSpeedModes['session-a'] = 'ultrafast';
+  assert.equal(f.run.speedFor('session-a'), 'ultrafast');
+  assert.equal(f.run.speedFor('session-b'), 'standard');
+  f.cleanup();
+});

@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { cpSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -11,11 +11,12 @@ function run(module: string, args: string[]): void {
 run('typescript/bin/tsc', ['-p', 'tsconfig.build.json']);
 if (process.argv.includes('--test')) {
   rmSync('.test-build', { recursive: true, force: true });
-  const directories = new Set(['tests', 'scripts', '.github', 'lib', 'docs']);
+  const directories = new Set(['tests', 'scripts', '.github', 'lib', 'docs', 'locale']);
   for (const entry of readdirSync('.', { withFileTypes: true })) {
     if (entry.isFile() || directories.has(entry.name)) cpSync(entry.name, '.test-build/' + entry.name, {
       recursive: true,
-      filter: path => entry.name === 'lib' || !/\.(?:js|jsx|mjs|ts|tsx|mts)$/.test(path),
+      // Run native upstream checks too; a typed sibling supplies its own emitted file.
+      filter: path => entry.name === 'lib' || !/\.(?:js|jsx|mjs|ts|tsx|mts)$/.test(path) || path.endsWith('.mjs') && !existsSync(path.replace(/\.mjs$/, '.mts')),
     });
   }
   run('typescript/bin/tsc', ['-p', 'tsconfig.shared.json']);

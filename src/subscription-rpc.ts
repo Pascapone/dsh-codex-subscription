@@ -1,3 +1,4 @@
+
 import type { ConnectionRpcResult } from '@deepseek-ai/dsh-client-connection';
 import type { createCodexRpcHandler } from './login-coordinator.js';
 import type { createQuotaForecastReader } from './quota-forecast.js';
@@ -10,7 +11,7 @@ import type { createCodexTranscriptionProvider } from './codex-transcription.js'
 import type { SpeedMode } from './settings-types.js';
 interface RpcHandlerOptions {
   authHandler: ReturnType<typeof createCodexRpcHandler>;
-  usageReader: Pick<ReturnType<typeof createQuotaForecastReader>, 'read' | 'clearScope' | 'clear' | 'clearCache'>;
+  usageReader: Pick<ReturnType<typeof createQuotaForecastReader>, 'read' | 'clearScope' | 'clear' | 'clearCache' | 'storage'>;
   resetCreditService: ReturnType<typeof createCodexResetCreditService>;
   preferences: { status(): Record<string, unknown>; update(patch: Record<string, unknown>): Promise<unknown>; setSpeed(sessionId: string, speedMode: SpeedMode): Promise<unknown> };
   runtimeManagement?: ReturnType<typeof createRuntimeManagement>;
@@ -20,32 +21,53 @@ interface RpcHandlerOptions {
   resolveInheritedOriginal?: (sessionId: string, assetId: string) => ReturnType<typeof inheritedOriginalImageRef>;
   closeConnections?: () => void;
   transcriptionEnabled?: () => boolean;
-  transcribeAudio: ReturnType<typeof createCodexTranscriptionProvider>;
+  onAccountChanged?: () => void;
+  onCleanupFailure?: () => void;
+  defaultModel?: ReturnType<typeof import('./default-model.js').createDefaultModelController>;
+  transcribeAudio?: ReturnType<typeof createCodexTranscriptionProvider>;
 }
 import { MODEL_CONTROL_DEFAULTS, PREFERENCE_FIELDS } from './preference-fields.js'
 import { decodeTranscriptionAudio } from './codex-transcription.js'
 import { capabilityPatch } from './capability-settings.js'
 import { ORIGINAL_IMAGE_CHUNK_BYTES, ORIGINAL_IMAGE_ID_PATTERN } from './image-original-contract.js'
-import { CUSTOM_CONTEXT_MODEL_CAPS, CUSTOM_CONTEXT_MODEL_FIELDS, CUSTOM_CONTEXT_WINDOW_FIELD, normalizeCustomContextWindow, SPEED_MODE_FAST, SPEED_MODE_STANDARD } from './settings-contract.js'
+import { AUTO_QUOTA_RETRY_FIELD, CUSTOM_CONTEXT_MODEL_CAPS, CUSTOM_CONTEXT_MODEL_FIELDS, CUSTOM_CONTEXT_WINDOW_FIELD, DISABLED_MODELS_FIELD, normalizeCustomContextWindow, normalizeDisabledModels } from './settings-contract.js'
 const publicError = (code: string, message: string): ConnectionRpcResult<never> => ({
   ok: false,
   error: { code, message, details: { issues: [] } },
 })
 
-export function createSubscriptionRpcHandler({ authHandler, usageReader, resetCreditService, preferences, runtimeManagement, diagnosticsReader, modelCatalog, originalImages, resolveInheritedOriginal, closeConnections, transcriptionEnabled, transcribeAudio }: RpcHandlerOptions) {
+export function createSubscriptionRpcHandler({ authHandler, usageReader, resetCreditService, preferences, defaultModel, runtimeManagement, diagnosticsReader, modelCatalog, originalImages, resolveInheritedOriginal, closeConnections, onAccountChanged, onCleanupFailure, transcriptionEnabled, transcribeAudio }: RpcHandlerOptions) {
   return async (endpoint: string, input: unknown, signal: AbortSignal): Promise<ConnectionRpcResult<unknown>> => {
     const payload = input as Record<string, unknown> | null | undefined;
-    if (endpoint === 'transcription/transcribe') {
-      if (!transcriptionEnabled?.()) return publicError('unavailable', 'Subscription transcription is disabled')
-      let input
-      try { input = decodeTranscriptionAudio(payload) } catch { return publicError('invalid-input', 'Invalid audio recording') }
+    if (endpoint === 'default-model/status' || endpoint === 'default-model/select') {
       try {
         signal.throwIfAborted()
-        return { ok: true, value: await transcribeAudio(input, signal) }
+        if (!defaultModel) return publicError('unavailable', 'The default model is unavailable')
+        const value = endpoint === 'default-model/status'
+          ? defaultModel.status()
+          : await defaultModel.select({ model: payload?.model })
+        return { ok: true, value }
       } catch (error) {
         if (signal.aborted) throw error
-        return publicError('transcription-failed', (error as { message?: unknown } | null | undefined)?.message === 'ChatGPT subscription is not signed in' || (error as { message?: unknown } | null | undefined)?.message === 'ChatGPT sign-in needs to be renewed'
-          ? (error as { message: string }).message : 'ChatGPT transcription failed. Try again.')
+        if ((error as { code?: string } | undefined)?.code === 'invalid-model') return publicError('invalid-input', 'Invalid default model')
+        if ((error as { code?: string } | undefined)?.code === 'unavailable') {
+          return publicError('unavailable', endpoint === 'default-model/status'
+            ? 'The default model is unavailable'
+            : 'Could not save the default model')
+        }
+        return publicError('internal', endpoint === 'default-model/status'
+          ? 'Could not read the default model'
+          : 'Could not save the default model')
+      }
+    }
+    if (endpoint === 'storage/status' || endpoint === 'storage/clear-forecast') {
+      try {
+        signal.throwIfAborted()
+        if (endpoint === 'storage/clear-forecast') await usageReader.clear()
+        return { ok: true, value: await usageReader.storage() }
+      } catch (error) {
+        if (signal.aborted) throw error
+        return publicError('operation-error', 'Could not manage forecast cache')
       }
     }
     if (['runtime/status', 'runtime/install', 'runtime/remove', 'runtime/cancel'].includes(endpoint)) {
@@ -98,9 +120,11 @@ export function createSubscriptionRpcHandler({ authHandler, usageReader, resetCr
         return {
           ok: true,
           value: {
+            availableModels: Array.isArray(value?.availableModels) ? value.availableModels : [],
             contextModels: Array.isArray(value?.contextModels) ? value.contextModels : [],
             verbosityModels: Array.isArray(value?.verbosityModels) ? value.verbosityModels : [],
             fastModels: Array.isArray(value?.fastModels) ? value.fastModels : [],
+            ultrafastModels: Array.isArray(value?.ultrafastModels) ? value.ultrafastModels : [],
             catalogStatus: value?.catalogStatus,
           },
         }
@@ -109,20 +133,39 @@ export function createSubscriptionRpcHandler({ authHandler, usageReader, resetCr
         return publicError('internal', 'Could not refresh Codex model catalog')
       }
     }
+    if (endpoint === 'transcription/transcribe') {
+      if (!transcriptionEnabled?.() || !transcribeAudio) return publicError('unavailable', 'Subscription transcription is disabled')
+      let audio: ReturnType<typeof decodeTranscriptionAudio>
+      try { audio = decodeTranscriptionAudio(payload) } catch { return publicError('invalid-input', 'Invalid audio recording') }
+      try {
+        signal.throwIfAborted()
+        return { ok: true, value: await transcribeAudio(audio, signal) }
+      } catch (error) {
+        if (signal.aborted) throw error
+        const message = (error as { message?: unknown } | null | undefined)?.message
+        return publicError('transcription-failed', message === 'ChatGPT subscription is not signed in' || message === 'ChatGPT sign-in needs to be renewed'
+          ? message : 'ChatGPT transcription failed. Try again.')
+      }
+    }
     if (endpoint === 'preferences/status' || endpoint === 'preferences/update') {
       try {
         signal.throwIfAborted()
         if (endpoint === 'preferences/update') {
           if (Object.hasOwn(payload ?? {}, 'sessionId')) {
-            if (typeof payload!.sessionId !== 'string' || payload!.sessionId.length < 1 || payload!.sessionId.length > 512
-              || ![SPEED_MODE_STANDARD, SPEED_MODE_FAST].includes(payload!.speedMode as string)
-              || Object.keys(payload!).some(key => !['sessionId', 'speedMode'].includes(key))) {
-              return publicError('invalid-input', 'Invalid session speed preference')
-            }
-            await preferences.setSpeed(payload!.sessionId as string, payload!.speedMode as SpeedMode)
-            return { ok: true, value: preferences.status() }
+            if (typeof payload?.sessionId !== 'string' || !payload.sessionId || payload.sessionId.length > 512 || typeof payload.speedMode !== 'string' || !['standard', 'fast', 'ultrafast'].includes(payload.speedMode) || Object.keys(payload).some(key => !['sessionId', 'speedMode'].includes(key))) return publicError('invalid-input', 'Invalid session speed preference');
+            await preferences.setSpeed(payload.sessionId, payload.speedMode as SpeedMode);
+            return { ok: true, value: preferences.status() };
           }
           const patch = capabilityPatch(payload) as Record<string, unknown>
+          if (Object.hasOwn(payload ?? {}, DISABLED_MODELS_FIELD)) {
+            const disabled = payload![DISABLED_MODELS_FIELD]
+            if (!Array.isArray(disabled) || disabled.length > 100 || disabled.length !== normalizeDisabledModels(disabled).length) return publicError('invalid-input', 'Invalid disabled models preference')
+            patch[DISABLED_MODELS_FIELD] = disabled
+          }
+          if (Object.hasOwn(payload ?? {}, AUTO_QUOTA_RETRY_FIELD)) {
+            if (typeof payload![AUTO_QUOTA_RETRY_FIELD] !== 'boolean') return publicError('invalid-input', 'Invalid automatic quota retry preference')
+            patch[AUTO_QUOTA_RETRY_FIELD] = payload![AUTO_QUOTA_RETRY_FIELD]
+          }
           for (const field of Object.keys(MODEL_CONTROL_DEFAULTS)) {
             if (!Object.hasOwn(payload ?? {}, field)) continue
             if (typeof payload![field] !== 'boolean') return publicError('invalid-input', 'Invalid model control preference')
@@ -214,20 +257,19 @@ export function createSubscriptionRpcHandler({ authHandler, usageReader, resetCr
       }
     }
     const result = await authHandler(endpoint, payload, signal)
-    if (result.ok === true && ['logout', 'account/select', 'account/remove'].includes(endpoint)) closeConnections?.()
-    if (endpoint === 'account/remove' && result.ok === true && typeof payload?.id === 'string') {
-      await usageReader.clearScope(payload.id)
-    }
-    if (endpoint === 'logout' && result.ok === true) {
-      await usageReader.clear()
-      resetCreditService.clear()
-      modelCatalog?.clear()
-    } else if (result.ok === true && (endpoint === 'account/select' || endpoint === 'account/remove'
+    if (result.ok === true && (endpoint === 'logout' || endpoint === 'account/select' || endpoint === 'account/remove'
       || (endpoint === 'login/status' && result.value?.authenticated === true))) {
-      usageReader.clearCache()
-      resetCreditService.clear()
-      modelCatalog?.clear()
-      void modelCatalog?.refresh({ signal: undefined }).catch(() => {})
+      // The account transaction has committed. Auxiliary cache failures must not
+      // misreport that transaction or prevent the remaining invalidations.
+      const tasks: (() => unknown)[] = [() => closeConnections?.(), () => usageReader.clearCache(),
+        () => resetCreditService.clear(), () => modelCatalog?.clear(), () => onAccountChanged?.()]
+      if (endpoint === 'logout') tasks.push(() => usageReader.clear())
+      if (endpoint === 'account/remove' && typeof payload?.id === 'string') tasks.push(() => usageReader.clearScope(payload.id))
+      const outcomes = await Promise.allSettled(tasks.map(task => Promise.resolve().then(task)))
+      if (outcomes.some(value => value.status === 'rejected')) {
+        try { onCleanupFailure?.() } catch { /* Diagnostics must not change account results. */ }
+      }
+      if (endpoint !== 'logout') void Promise.resolve().then(() => modelCatalog?.refresh({ signal: undefined })).catch(() => {})
     } else if (result.ok === true && (endpoint === 'status' || result.value?.authenticated === true)) {
       void modelCatalog?.refresh({ signal: undefined }).catch(() => {})
     }

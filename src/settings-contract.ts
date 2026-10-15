@@ -1,7 +1,11 @@
+
 import type { ContextModel, ContextModelGroup, SearchProvider, OutputVerbosity, SpeedMode, ContextMode, QuickQuotaMode } from './settings-types.js';
 import { MAX_CONTEXT_BUDGET, validModelKey } from './capability-settings.js'
 
 export const SETTINGS_NAMESPACE = 'codex-subscription'
+export const DISABLED_MODELS_FIELD = 'disabledModels'
+export const AUTO_QUOTA_RETRY_FIELD = 'autoQuotaRetry'
+export const DEFAULT_AUTO_QUOTA_RETRY = false
 export const QUICK_QUOTA_MODE_FIELD = 'quickQuotaMode'
 export const LEGACY_QUICK_QUOTA_FIELD = 'quickQuotaVisible'
 export const QUICK_QUOTA_MODE_OFF = 'off'
@@ -18,6 +22,7 @@ export const SPEED_MODE_FIELD = 'speedMode'
 export const SESSION_SPEED_MODES_FIELD = 'sessionSpeedModes'
 export const SPEED_MODE_STANDARD = 'standard'
 export const SPEED_MODE_FAST = 'fast'
+export const SPEED_MODE_ULTRAFAST = 'ultrafast'
 export const DEFAULT_SPEED_MODE = SPEED_MODE_STANDARD
 export const OUTPUT_VERBOSITY_FIELD = 'outputVerbosity'
 export const OUTPUT_VERBOSITY_DEFAULT = 'default'
@@ -25,6 +30,12 @@ export const OUTPUT_VERBOSITY_LOW = 'low'
 export const OUTPUT_VERBOSITY_MEDIUM = 'medium'
 export const OUTPUT_VERBOSITY_HIGH = 'high'
 export const DEFAULT_OUTPUT_VERBOSITY = OUTPUT_VERBOSITY_DEFAULT
+export const INPUT_IMAGE_DETAIL_FIELD = 'inputImageDetail'
+export const INPUT_IMAGE_DETAILS = Object.freeze(['low', 'high', 'original', 'auto'])
+export const DEFAULT_INPUT_IMAGE_DETAIL = 'auto'
+export const STREAM_IDLE_TIMEOUT_MINUTES_FIELD = 'streamIdleTimeoutMinutes'
+export const STREAM_IDLE_TIMEOUT_MINUTES = Object.freeze([2, 5, 10, 20, 30])
+export const DEFAULT_STREAM_IDLE_TIMEOUT_MINUTES = 10
 export const CONTEXT_MODE_FIELD = 'contextMode'
 export const CONTEXT_MODE_STANDARD = 'standard'
 export const CONTEXT_MODE_EXTENDED = 'extended'
@@ -58,6 +69,12 @@ export const CUSTOM_CONTEXT_MODEL_DEFAULTS = Object.freeze({
   'gpt-6-astra': 272_000,
 })
 
+export const normalizeAutoQuotaRetry = (value: unknown) => typeof value === 'boolean' ? value : DEFAULT_AUTO_QUOTA_RETRY
+
+export const normalizeDisabledModels = (value: unknown): string[] => Array.isArray(value)
+  ? [...new Set(value.filter(id => typeof id === 'string' && /^[a-z][a-z0-9._-]{0,79}$/u.test(id)))].slice(0, 100)
+  : []
+
 export const normalizeSearchProvider = (value: unknown): SearchProvider => ([SEARCH_PROVIDER_AUTO, SEARCH_PROVIDER_DSH, SEARCH_PROVIDER_CODEX] as readonly unknown[]).includes(value)
   ? value as SearchProvider
   : DEFAULT_SEARCH_PROVIDER
@@ -69,7 +86,15 @@ export const normalizeOutputVerbosity = (value: unknown): OutputVerbosity => ([
   OUTPUT_VERBOSITY_HIGH,
 ] as readonly unknown[]).includes(value) ? value as OutputVerbosity : DEFAULT_OUTPUT_VERBOSITY
 
-export const normalizeSpeedMode = (value: unknown): SpeedMode => ([SPEED_MODE_STANDARD, SPEED_MODE_FAST] as readonly unknown[]).includes(value)
+export const normalizeInputImageDetail = (value: unknown): (typeof INPUT_IMAGE_DETAILS)[number] => (INPUT_IMAGE_DETAILS as readonly unknown[]).includes(value)
+  ? value as (typeof INPUT_IMAGE_DETAILS)[number]
+  : DEFAULT_INPUT_IMAGE_DETAIL
+
+export const normalizeStreamIdleTimeoutMinutes = (value: unknown): number => (STREAM_IDLE_TIMEOUT_MINUTES as readonly unknown[]).includes(value)
+  ? value as number
+  : DEFAULT_STREAM_IDLE_TIMEOUT_MINUTES
+
+export const normalizeSpeedMode = (value: unknown): SpeedMode => ([SPEED_MODE_STANDARD, SPEED_MODE_FAST, SPEED_MODE_ULTRAFAST] as readonly unknown[]).includes(value)
   ? value as SpeedMode
   : DEFAULT_SPEED_MODE
 

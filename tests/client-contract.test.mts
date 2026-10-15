@@ -1,3 +1,4 @@
+
 import assert from 'node:assert/strict'
 import { readSource as readFile } from './source-contract.js'
 import test from 'node:test'
@@ -6,8 +7,8 @@ import { SlotCore } from '@deepseek-ai/dsh-client-ui-slots'
 const read = (path: string) => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
 // These contracts cover the client entry and its authored copy, styles and download helper.
 const text = (path: string) => path === 'src/client.jsx'
-  ? Promise.all([path, 'src/rpc-contract.js', 'src/client-shared.js', 'src/client-account.jsx', 'src/client-composer-quota.jsx', 'src/client-diagnostics.jsx', 'src/client-model-select.jsx', 'src/client-preferences.jsx', 'src/client-runtime-management.jsx', 'src/client-quota.jsx', 'src/client-section.jsx', 'src/client-usage.jsx', 'src/client-locales.js', 'src/client-styles.js', 'src/client-images.jsx', 'src/original-image-download.js'].map(read)).then(parts => parts.join('\n'))
-  : path === 'src/index.js' ? Promise.all([path, 'src/subscription-rpc.js'].map(read)).then(parts => parts.join('\n')) : read(path)
+  ? Promise.all([path, 'src/rpc-contract.js', 'src/client-shared.js', 'src/client-account.jsx', 'src/client-composer-quota.jsx', 'src/client-diagnostics.jsx', 'src/client-model-select.jsx', 'src/client-preferences.jsx', 'src/default-model-preferences.jsx', 'src/default-model-controller.js', 'src/client-runtime-management.jsx', 'src/client-quota.jsx', 'src/client-section.jsx', 'src/client-usage.jsx', 'src/client-locales.js', 'src/client-styles.js', 'src/client-images.jsx', 'src/original-image-download.js'].map(read)).then(parts => parts.join('\n'))
+  : path === 'src/index.js' ? Promise.all([path, 'src/subscription-rpc.js', 'src/default-model.js'].map(read)).then(parts => parts.join('\n')) : read(path)
 
 test('generated image loader uses the installed DSH UI conversation image API', async () => {
   const source = await text('src/client.jsx')
@@ -92,6 +93,8 @@ test('composer quota modes use the public composer slot before the model selecto
   assert.match(client, /QUICK_QUOTA_MODE_BAR/u)
   assert.match(client, /QUICK_QUOTA_MODE_FORECAST/u)
   assert.match(client, /role=['"]radiogroup['"]/u)
+  assert.match(client, /<Switch /u, 'the automatic retry option uses the DSH host switch')
+  assert.match(client, /AUTO_QUOTA_RETRY_FIELD/u)
   assert.match(client, /type=['"]radio['"]/u)
   assert.match(client, /role=['"]status['"]/u)
   assert.match(client, /preferenceSnapshot\.status === ['"]ready['"] && preferenceSnapshot\.quickQuotaMode !== QUICK_QUOTA_MODE_OFF/u)
@@ -102,7 +105,12 @@ test('composer quota modes use the public composer slot before the model selecto
   assert.match(host, /settings\.watch/u)
   assert.match(host, /preferences\/status/u)
   assert.match(host, /preferences\/update/u)
+  assert.match(host, /notifyAccountChanged/u)
+  assert.match(host, /notifyConfigurationChanged/u)
+  assert.match(host, /agent\/request-error/u)
   assert.match(host, /QUICK_QUOTA_MODE_FIELD/u)
+  assert.match(contract, /AUTO_QUOTA_RETRY_FIELD\s*=\s*['"]autoQuotaRetry['"]/u)
+  assert.match(contract, /DEFAULT_AUTO_QUOTA_RETRY\s*=\s*false/u)
   assert.match(contract, /QUICK_QUOTA_MODE_FIELD\s*=\s*['"]quickQuotaMode['"]/u)
   assert.match(contract, /LEGACY_QUICK_QUOTA_FIELD\s*=\s*['"]quickQuotaVisible['"]/u)
   assert.match(contract, /DEFAULT_QUICK_QUOTA_MODE\s*=\s*QUICK_QUOTA_MODE_OFF/u)
@@ -233,7 +241,7 @@ test('Codex-only model picker uses the compact effort slider and a confirmed red
   assert.match(client, /codexModelPicker[\s\S]*?removePicker\?\.\(\)/u)
   assert.match(client, /snapshot\[field\]/u)
   assert.match(client, /runtime \? busy \|\| !speedWritable : locked \|\| running \|\| busy/u)
-  assert.match(client, /fast && <BoltIcon className=['"]codexModelSelectBolt['"]/u)
+  assert.match(client, /\(fast \|\| ultrafast\) && <BoltIcon className=['"]codexModelSelectBolt['"]/u)
   assert.match(client, /pane === 'root' \? <>[\s\S]*?\{submenu\}/u, 'the selected pane replaces the root menu instead of opening alongside it')
   assert.match(client, /onClick=\{backToRoot\}[^>]*><IconChevronLeftOutline14/u, 'the pane has a back action')
   assert.match(client, /mobile && open \? createPortal\([\s\S]*?document\.body\)/u, 'mobile picker escapes the clipped composer into a body-mounted drawer')
@@ -395,11 +403,12 @@ test('preference writes keep ready surfaces mounted while persistence is pending
   assert.match(client, /\.codexSubscriptionSearchChoices\[data-saving=true\].*opacity:1/u)
 })
 
-test('support diagnostics stay compact without an extra expand step', async () => {
+test('support diagnostics show coverage with expandable evidence', async () => {
   const source = await text('src/client.jsx')
   assert.doesNotMatch(source, /diagnosticsOpen|diagnosticsClose|setDiagnosticsOpen|aria-expanded=\{diagnosticsOpen\}/u)
   assert.match(source, /codexSubscriptionDiagnostics[\s\S]*t\('diagnosticsLoad'\)/u)
-  assert.match(source, /report === undefined \? null : <pre>/u)
+  assert.match(source, /diagnosticsCoverageHint/u)
+  assert.match(source, /<details><summary>\{t\('diagnosticsDetails'\)\}/u)
   assert.match(source, /diagnosticsCopy/u)
 })
 

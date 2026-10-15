@@ -1,3 +1,4 @@
+
 import type { ExecFileOptions } from 'node:child_process';
 import type * as OfficialRuntime from '@deepseek-ai/dsh-subagent-codex';
 import type * as Protocol from '@deepseek-ai/dsh-sdk-protocol';
@@ -11,19 +12,31 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
 export const SUBAGENT_RUNTIME_PACKAGE = '@deepseek-ai/dsh-subagent-codex'
-export const SUBAGENT_RUNTIME_VERSION = '0.1.7-rc.2'
-const SUPPORTED_RUNTIME_VERSIONS = new Set(['0.1.5-rc.2', '0.1.5-rc.3', '0.1.7-rc.1', SUBAGENT_RUNTIME_VERSION])
+export const SUBAGENT_RUNTIME_VERSION = '0.2.0-rc.2'
+export const SUPPORTED_RUNTIME_VERSIONS = Object.freeze(['0.1.5-rc.2', '0.1.5-rc.3', '0.1.7-rc.1', '0.1.7-rc.2', '0.2.0-rc.1', SUBAGENT_RUNTIME_VERSION, '0.2.1-alpha.1'])
 const require = createRequire(import.meta.url)
 const execute = promisify(execFile)
+
+/** The DSH release this plugin is loaded into, read from the host's own LLM package. */
+// A desktop build bundles DSH next to its host entry, not next to this plugin,
+// so also resolve from the host process's entry script.
+export function hostDshVersion(resolve: ModuleResolver = require.resolve, entry = process.argv[1]) {
+  const attempts = [() => resolve('@deepseek-ai/dsh-llm/package.json')]
+  if (typeof entry === 'string' && entry) attempts.push(() => require.resolve('@deepseek-ai/dsh-llm/package.json', { paths: [dirname(entry)] }))
+  for (const attempt of attempts) {
+    try {
+      const { version } = JSON.parse(readFileSync(attempt(), 'utf8'))
+      if (typeof version === 'string' && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(version)) return version
+    } catch {}
+  }
+  return undefined
+}
 
 // The official component declares exact DSH cohort peers. Installing the
 // newest component into an older host can appear to succeed but fail at load.
 export function matchingSubagentRuntimeVersion(resolve: ModuleResolver = require.resolve) {
-  try {
-    const raw: unknown = JSON.parse(readFileSync(resolve('@deepseek-ai/dsh-llm/package.json'), 'utf8'));
-    const host = raw as { version?: unknown };
-    return SUPPORTED_RUNTIME_VERSIONS.has(host.version as string) ? host.version as string : undefined
-  } catch { return undefined }
+  const version = hostDshVersion(resolve, resolve === require.resolve ? process.argv[1] : '')
+  return SUPPORTED_RUNTIME_VERSIONS.includes(version!) ? version : undefined
 }
 
 // Resolve from this plugin's dependency graph, then use the provider's own
@@ -31,9 +44,8 @@ export function matchingSubagentRuntimeVersion(resolve: ModuleResolver = require
 export function inspectSubagentRuntime(resolve: ModuleResolver = require.resolve) {
   try {
     const manifestPath = resolve(`${SUBAGENT_RUNTIME_PACKAGE}/package.json`)
-    const raw: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'));
-    const manifest = raw as { version?: unknown };
-    if (!SUPPORTED_RUNTIME_VERSIONS.has(manifest.version as string) || manifest.version !== matchingSubagentRuntimeVersion(resolve)) return { installed: false, present: true }
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    if (!SUPPORTED_RUNTIME_VERSIONS.includes(manifest.version) || manifest.version !== matchingSubagentRuntimeVersion(resolve)) return { installed: false, present: true }
     return { installed: true }
   } catch { return { installed: false } }
 }

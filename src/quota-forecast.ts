@@ -3,7 +3,8 @@ import type { createCodexUsageReader } from './usage.js';
 import type { QuotaForecastStateStore } from './quota-forecast-store.js';
 type UsageReader = Pick<ReturnType<typeof createCodexUsageReader>, 'read' | 'clear'>;
 interface ForecastUsageInput { fetchedAt?: number; rateLimits?: readonly { id?: unknown; windows: readonly ForecastObservation[] }[] }
-interface ForecastReaderOptions { reader: UsageReader; enabled(): boolean; now?: () => number; scope?: () => unknown | Promise<unknown>; stateStore?: Partial<Pick<QuotaForecastStateStore, 'load' | 'save' | 'clear'>> }
+type ForecastedUsage<T extends ForecastUsageInput> = T & { rateLimits: { windows: (ForecastObservation & { forecast: QuotaForecast })[] }[] };
+interface ForecastReaderOptions { reader: UsageReader; enabled(): boolean; now?: () => number; scope?: () => unknown | Promise<unknown>; stateStore?: Partial<Pick<QuotaForecastStateStore, 'load' | 'save' | 'clear' | 'usage'>> }
 import { quotaRateInterval, refineQuotaRate } from './quota-rate-interval.js'
 const HOUR_MS = 60 * 60 * 1000
 const HISTORY_MS = 24 * HOUR_MS
@@ -100,7 +101,7 @@ export function estimateQuotaForecast(state: ForecastState | undefined, window: 
 
 export function forecastUsage<T extends ForecastUsageInput>(usage: T | undefined, state: ForecastState = { windows: {} }, now = Date.now(), options: ForecastContext = {}) {
   const observedAt = Number.isFinite(usage?.fetchedAt) ? usage!.fetchedAt! : now
-  if (observedAt > now || now - observedAt > 5 * 60_000) return { state, changed: false, usage: { ...usage, rateLimits: (usage?.rateLimits ?? []).map(limit => ({ ...limit, windows: limit.windows.map(window => ({ ...window, forecast: { status: 'calibrating' as const, reason: 'stale' as const } })) })) } }
+  if (observedAt > now || now - observedAt > 5 * 60_000) return { state, changed: false, usage: { ...usage, rateLimits: (usage?.rateLimits ?? []).map(limit => ({ ...limit, windows: limit.windows.map(window => ({ ...window, forecast: { status: 'calibrating' as const, reason: 'stale' as const } })) })) } as unknown as ForecastedUsage<T> }
   let nextState = state
   let changed = false
   const rateLimits = (usage?.rateLimits ?? []).map(limit => {
@@ -116,7 +117,7 @@ export function forecastUsage<T extends ForecastUsageInput>(usage: T | undefined
       })),
     }
   })
-  return { state: nextState, changed, usage: { ...usage, rateLimits } }
+  return { state: nextState, changed, usage: { ...usage, rateLimits } as unknown as ForecastedUsage<T> }
 }
 
 export function createQuotaForecastReader({ reader, enabled, now = Date.now, scope = () => 'default', stateStore }: ForecastReaderOptions) {
@@ -172,6 +173,10 @@ export function createQuotaForecastReader({ reader, enabled, now = Date.now, sco
       return current === generation ? forecast.usage : usage
     },
     clear: () => clearHistory(),
+    storage: async () => {
+      if (!stateStore?.usage) throw Error('Forecast storage is unavailable');
+      return stateStore.usage();
+    },
     clearCache() {
       generation += 1
       reader.clear()

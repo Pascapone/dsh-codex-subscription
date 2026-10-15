@@ -2,6 +2,7 @@ import type { WebSearchProvider, WebSearchSource } from '@deepseek-ai/dsh-web';
 import type { AuthReaders } from './model-types.js';
 interface SearchOptions extends AuthReaders { fetch?: typeof fetch; resolvePreferences?: () => Parameters<typeof readCapabilitySettings>[0]; resolveModel?: () => unknown; resolveSessionId?: () => unknown }
 interface AutoSearchOptions { codex: WebSearchProvider; resolveModelProvider?: () => unknown; resolveDshProvider?: () => WebSearchProvider | undefined }
+import { readSubscriptionCredentials } from './subscription-credentials.js'
 import { randomUUID } from 'node:crypto'
 
 import { WebError } from '@deepseek-ai/dsh-web'
@@ -80,10 +81,7 @@ export function createCodexSearchProvider(options: SearchOptions): WebSearchProv
       signal?.throwIfAborted()
       const preferences = readCapabilitySettings(options.resolvePreferences?.())
       if (preferences.searchMode === 'disabled') throw new WebError('Codex search is disabled in subscription settings', 'WEB_PROVIDER_UNAVAILABLE')
-      const auth = await options.getAuth({ signal })
-      const credential = await options.readCredential({ signal })
-      const access = auth?.auth?.apiKey
-      const accountId = credential?.type === 'oauth' ? credential.accountId : undefined
+      const { access, accountId } = await readSubscriptionCredentials(options.getAuth, options.readCredential, signal)
       if (typeof access !== 'string' || access.length === 0
         || typeof accountId !== 'string' || accountId.length === 0) {
         throw new WebError('ChatGPT subscription is not signed in', 'WEB_PROVIDER_CREDENTIAL_MISSING')

@@ -8,6 +8,10 @@ export declare const sketchCommandArray: {
                 readonly type: "string";
                 readonly enum: readonly ["update", "duplicate", "delete", "add", "select", "rename", "visible", "up", "down", "clear"];
             };
+            readonly svg: {
+                readonly type: "string";
+                readonly description: "op svg only: a complete <svg viewBox=\"0 0 W H\"> document (W and H equal to the canvas width and height from inspect). Imported as native editable strokes; the fastest way to draw a whole scene. Optional layer sets the target layer.";
+            };
             readonly value: {
                 readonly type: "string";
             };
@@ -106,7 +110,7 @@ export declare const sketchCommandArray: {
             readonly op: {
                 readonly type: "string";
                 readonly required: true;
-                readonly enum: readonly ["stroke", "object", "layer", "resize"];
+                readonly enum: readonly ["stroke", "object", "layer", "resize", "svg"];
             };
             readonly id: {
                 readonly oneOf: readonly [{
