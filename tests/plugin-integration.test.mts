@@ -872,3 +872,16 @@ test('plugin unload aborts an active login without logging out or deleting crede
     await dispose()
   } finally { prototype.start = originalStart }
 })
+
+test('Codex exposes shared transcription only when the Host speech registry exists and owns its disposer', async () => {
+  const host = fakeContext()
+  let registered: import('@deepseek-ai/dsh-experimental-speech-to-text').SpeechProvider | undefined
+  Object.assign(host.ctx, { speechToText: { register(provider: NonNullable<typeof registered>) {
+    registered = provider; return async () => { registered = undefined }
+  } } })
+  applyPlugin(host.ctx)
+  assert.equal(registered?.info.id, 'codex-subscription')
+  await assert.rejects(registered!.transcribe({ audio: new Uint8Array(), language: 'auto' }, new AbortController().signal), /Enable transcription/)
+  await host.disposers.get('codex-subscription: shared transcription provider')?.()
+  assert.equal(registered, undefined)
+})

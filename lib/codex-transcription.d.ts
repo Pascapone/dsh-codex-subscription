@@ -1,4 +1,5 @@
 import type { AuthReaders } from './model-types.js';
+import type { SpeechProvider } from '@deepseek-ai/dsh-experimental-speech-to-text';
 export interface TranscriptionAudio {
     audio: Buffer<ArrayBuffer>;
     mime: string;
@@ -18,3 +19,5 @@ export declare function createCodexTranscriptionProvider({ getAuth, readCredenti
 }): ({ audio, mime, filename }: TranscriptionAudio, signal: AbortSignal) => Promise<{
     text: string;
 }>;
+/** Shared Host recognizer; credentials and the selected account never leave this plugin. */
+export declare function createCodexSpeechProvider(transcribe: ReturnType<typeof createCodexTranscriptionProvider>, enabled: () => boolean): SpeechProvider;

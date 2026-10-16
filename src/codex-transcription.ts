@@ -1,5 +1,6 @@
 import { readSubscriptionCredentials } from './subscription-credentials.js';
 import type { AuthReaders } from './model-types.js';
+import type { SpeechProvider, SpeechProviderId } from '@deepseek-ai/dsh-experimental-speech-to-text';
 export interface TranscriptionAudio { audio: Buffer<ArrayBuffer>; mime: string; filename: string }
 export const CODEX_TRANSCRIPTION_URL = 'https://chatgpt.com/backend-api/transcribe'
 export const MAX_TRANSCRIPTION_BYTES = 25 * 1024 * 1024
@@ -45,11 +46,44 @@ export function createCodexTranscriptionProvider({ getAuth, readCredential, fetc
       method: 'POST', headers, body: new Uint8Array(await encoded.arrayBuffer()), signal, redirect: 'error',
     })
     signal.throwIfAborted()
-    if (!response.ok) throw new Error(response.status === 401 || response.status === 403
-      ? 'ChatGPT sign-in needs to be renewed'
-      : `ChatGPT transcription failed (HTTP ${response.status})`)
+    if (!response.ok) {
+      if (response.status === 403 && (response.headers.get('cf-mitigated') === 'challenge' || response.headers.get('content-type')?.includes('text/html'))) throw new Error('Cloudflare blocked ChatGPT transcription. Try again later.')
+      throw new Error(response.status === 401 || response.status === 403
+        ? 'ChatGPT sign-in needs to be renewed'
+        : `ChatGPT transcription failed (HTTP ${response.status})`)
+    }
     const result = await response.json() as { text?: unknown } | null | undefined
     if (typeof result?.text !== 'string' || !result.text.trim()) throw new Error('ChatGPT returned an empty transcription')
     return { text: result.text.trim() }
+  }
+}
+
+/** Shared Host recognizer; credentials and the selected account never leave this plugin. */
+export function createCodexSpeechProvider(transcribe: ReturnType<typeof createCodexTranscriptionProvider>, enabled: () => boolean): SpeechProvider {
+  return {
+    info: { id: 'codex-subscription' as SpeechProviderId, name: 'ChatGPT / Codex Subscription', location: 'cloud', languages: ['auto'] },
+    async transcribe({ audio }, signal) {
+      signal.throwIfAborted()
+      if (!enabled()) throw new Error('Enable transcription in DSH Settings → Codex Subscription before using dictation.')
+      const wav = Buffer.from(audio)
+      if (wav.length < 44 || wav.length > MAX_TRANSCRIPTION_BYTES || wav.toString('ascii', 0, 4) !== 'RIFF'
+        || wav.toString('ascii', 8, 16) !== 'WAVEfmt ' || wav.readUInt32LE(16) !== 16
+        || wav.readUInt16LE(20) !== 1 || wav.readUInt16LE(22) !== 1 || wav.readUInt16LE(34) !== 16
+        || wav.toString('ascii', 36, 40) !== 'data' || wav.readUInt32LE(4) !== wav.length - 8
+        || wav.readUInt32LE(40) !== wav.length - 44 || (wav.length - 44) % 2 !== 0
+        || wav.readUInt32LE(24) < 8000 || wav.readUInt32LE(24) > 192000
+        || wav.readUInt32LE(28) !== wav.readUInt32LE(24) * 2 || wav.readUInt16LE(32) !== 2 || wav.length === 44) throw new Error('Invalid PCM16 mono WAV recording')
+      const started = performance.now()
+      let result: { text: string }
+      try { result = await transcribe({ audio: wav, mime: 'audio/wav', filename: 'recording.wav' }, AbortSignal.any([signal, AbortSignal.timeout(120_000)])) }
+      catch (error) {
+        signal.throwIfAborted()
+        const message = error instanceof Error ? error.message : ''
+        const safe = ['ChatGPT subscription is not signed in', 'ChatGPT sign-in needs to be renewed', 'ChatGPT returned an empty transcription', 'Cloudflare blocked ChatGPT transcription. Try again later.'].includes(message) || /^ChatGPT transcription failed \(HTTP \d{3}\)$/.test(message)
+        throw new Error(safe ? message : 'ChatGPT transcription failed. Check Codex Subscription settings and try again.')
+      }
+      signal.throwIfAborted()
+      return { text: result.text, audioSeconds: (wav.length - 44) / wav.readUInt32LE(28), inferenceSeconds: (performance.now() - started) / 1000 }
+    },
   }
 }

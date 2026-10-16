@@ -37,7 +37,7 @@ import { createOfficialModelCatalog } from './model-catalog.js'
 import { readCapabilitySettings, normalizeSearchDomains, CUSTOM_CONTEXT_OVERRIDES_FIELD, SEARCH_MODE_FIELD, SEARCH_MODES, SEARCH_DOMAINS_FIELD, QUOTA_ALERTS_FIELD, QUOTA_ALERT_MODES, QUOTA_THRESHOLD_FIELDS, MAX_CONTEXT_BUDGET } from './capability-settings.js'
 import { CODEX_AUTO_SEARCH_PROVIDER_ID, CODEX_SEARCH_PROVIDER_ID, createCodexAutoSearchProvider, createCodexSearchProvider } from './codex-search.js'
 import { createCodexImageTool } from './codex-images.js'
-import { createCodexTranscriptionProvider } from './codex-transcription.js'
+import { createCodexSpeechProvider, createCodexTranscriptionProvider } from './codex-transcription.js'
 import { IMAGE_FEATURE_DEFAULTS } from './image-features.js'
 import { watchImageTool } from './image-tool-registration.js'
 import { IMAGE_MODELS, DEFAULT_IMAGE_MODEL } from './image-models.js'
@@ -480,16 +480,20 @@ export function apply(ctx: Context, config: Schemastery.TypeS<typeof Config> = {
     sync();const unwatch=settings.watch(sync)
     return ()=>{unwatch();dispose?.();sketchBridge.dispose()}
   },'codex-subscription: native sketch tool')
+  const transcribeAudio = createCodexTranscriptionProvider({
+    getAuth: resolveAuth, readCredential: options => store.read(PROVIDER, options),
+    fetch: (input, init) => network.fetch('transcription', input, init),
+  })
+  ctx.inject(['speechToText'], scoped => scoped.effect(() => scoped.speechToText.register(
+    createCodexSpeechProvider(transcribeAudio, () => settings.get().transcriptionEnabled === true),
+  ), 'codex-subscription: shared transcription provider'))
   const subscriptionHandler = createSubscriptionRpcHandler({
     authHandler: createCodexRpcHandler(coordinator, { openExternal: openCodexAuthUrl }),
     usageReader,
     resetCreditService,
     preferences,
     transcriptionEnabled: () => settings.get().transcriptionEnabled === true,
-    transcribeAudio: createCodexTranscriptionProvider({
-      getAuth: resolveAuth, readCredential: options => store.read(PROVIDER, options),
-      fetch: (input, init) => network.fetch('transcription', input, init),
-    }),
+    transcribeAudio,
     defaultModel,
     runtimeManagement,
     onAccountChanged: quotaRetryHandler.notifyAccountChanged,

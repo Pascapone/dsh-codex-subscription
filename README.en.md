@@ -76,6 +76,8 @@ Subscription access, model controls, quota management, and image creation in one
 
 ### Advanced capabilities and maintenance
 
+Other Host plugins can reuse the selected Codex account through DSH's optional `speechToText` service. When that service is mounted, this plugin registers the cloud provider `codex-subscription` (PCM16 mono WAV, automatic language detection). Enable subscription transcription in Settings first. Account selection, token refresh and requests remain inside Codex Subscription; consumers receive text, never credentials. Removing the provider cancels in-flight recognition. Older DSH installations without the speech service keep their existing behavior.
+
 | Feature | What you can do | Availability / setup |
 | --- | --- | --- |
 | **Codex independent subtasks** | Reuse subscription sign-in and workspace permissions; select allowed models and reasoning levels | Beta; DSH by default, Codex requires the optional component and model-selection setup |

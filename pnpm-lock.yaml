@@ -95,6 +95,9 @@ importers:
       '@deepseek-ai/dsh-credentials':
         specifier: 0.2.1-alpha.1
         version: 0.2.1-alpha.1(@deepseek-ai/cordis@4.0.5-alpha.1)
+      '@deepseek-ai/dsh-experimental-speech-to-text':
+        specifier: 0.2.1-alpha.1
+        version: 0.2.1-alpha.1(@deepseek-ai/cordis-plugin-loader@1.0.6-alpha.1)(@deepseek-ai/cordis@4.0.5-alpha.1)(@deepseek-ai/dsh-settings@0.2.1-alpha.1(7bb39d3a398590d9618f8116f6a0da69))
       '@deepseek-ai/dsh-llm':
         specifier: 0.2.1-alpha.1
         version: 0.2.1-alpha.1(@deepseek-ai/cordis@4.0.5-alpha.1)
@@ -603,6 +606,16 @@ packages:
     resolution: {integrity: sha512-2Qo6KyjlLEejMxLrJflXPVSgxsDgRs21JsUZfmHwdMx8a6e8uAEvCeFaKl93SfypSQcGkfF0uChygJ4Ct1+d0w==}
     peerDependencies:
       '@deepseek-ai/cordis': 4.0.5-alpha.1
+
+  '@deepseek-ai/dsh-experimental-speech-to-text@0.2.1-alpha.1':
+    resolution: {integrity: sha512-IH//3OLqOvMFP96HZ95CnSZWw2dBDv0owxEyo0nFO58igCNX1mJ7FcE7tgv2A0avVn3MPKmsTTutC6JZZbdMFQ==}
+    peerDependencies:
+      '@deepseek-ai/cordis': 4.0.5-alpha.1
+      '@deepseek-ai/cordis-plugin-loader': 1.0.6-alpha.1
+      '@deepseek-ai/dsh-settings': 0.2.1-alpha.1
+    peerDependenciesMeta:
+      '@deepseek-ai/cordis-plugin-loader':
+        optional: true
 
   '@deepseek-ai/dsh-file-reference@0.2.1-alpha.1':
     resolution: {integrity: sha512-7et6Tk+O7CI1ygiDaFagJH76eP58W92BGjF3KwJrQB0QSNmxs3I05KTt9xYr8nsBf0xfGGNqQVTapVywJxJzZQ==}
@@ -2648,6 +2661,15 @@ snapshots:
   '@deepseek-ai/dsh-deque@0.2.1-alpha.1(@deepseek-ai/cordis@4.0.5-alpha.1)':
     dependencies:
       '@deepseek-ai/cordis': 4.0.5-alpha.1(@deepseek-ai/cordis-plugin-include@1.0.10-alpha.1)(@deepseek-ai/cordis-plugin-loader@1.0.6-alpha.1)
+
+  '@deepseek-ai/dsh-experimental-speech-to-text@0.2.1-alpha.1(@deepseek-ai/cordis-plugin-loader@1.0.6-alpha.1)(@deepseek-ai/cordis@4.0.5-alpha.1)(@deepseek-ai/dsh-settings@0.2.1-alpha.1(7bb39d3a398590d9618f8116f6a0da69))':
+    dependencies:
+      '@deepseek-ai/cordis': 4.0.5-alpha.1(@deepseek-ai/cordis-plugin-include@1.0.10-alpha.1)(@deepseek-ai/cordis-plugin-loader@1.0.6-alpha.1)
+      '@deepseek-ai/dsh-brand': 0.2.1-alpha.1(@deepseek-ai/cordis@4.0.5-alpha.1)
+      '@deepseek-ai/dsh-settings': 0.2.1-alpha.1(7bb39d3a398590d9618f8116f6a0da69)
+      '@deepseek-ai/schemastery': 3.18.5-alpha.1
+    optionalDependencies:
+      '@deepseek-ai/cordis-plugin-loader': 1.0.6-alpha.1(@deepseek-ai/cordis@4.0.5-alpha.1)(node-addon-require-builtin@0.1.6)
 
   '@deepseek-ai/dsh-file-reference@0.2.1-alpha.1(@deepseek-ai/cordis@4.0.5-alpha.1)(@deepseek-ai/dsh-agent@0.2.1-alpha.1(bc8e1a234d16d0329e7a818df1caf030))':
     dependencies:
