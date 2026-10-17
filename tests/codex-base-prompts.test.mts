@@ -31,3 +31,21 @@ test('DSH adaptations retain host boundaries, useful autonomy and distinct model
   assert.match(luna, /Minimize newly written tests/u)
   assert.match(luna, /fewer new tests does not mean skipping required verification/u)
 })
+
+test('all supported models receive DSH communication and optional-question guidance', () => {
+  for (const [id, text] of Object.entries(DSH_MODEL_PROMPTS)) {
+    assert.match(text, /Use the commentary channel for intermediate updates/u, id)
+    assert.match(text, /final channel yields back to the user and ends your turn/u, id)
+    assert.match(text, /Before your first tool call.*send a brief commentary message/u, id)
+    assert.match(text, /milestones, new findings, decisions, changes of direction/u, id)
+    assert.match(text, /A task list or tool output does not replace these updates/u, id)
+    assert.match(text, /roughly once a minute at an available step boundary/u, id)
+    assert.match(text, /Do not add sleeps, polling or clock tools/u, id)
+    assert.match(text, /briefly in commentary.*resume the remaining authorized work/u, id)
+    assert.match(text, /use ask_user_async when exposed/u, id)
+    assert.match(text, /question_status and question_close contracts/u, id)
+    assert.match(text, /Immediately continue independent authorized work after asking/u, id)
+    assert.match(text, /Required input, credentials and approvals are not optional feedback/u, id)
+    assert.match(text, /self-contained final answer/u, id)
+  }
+})
